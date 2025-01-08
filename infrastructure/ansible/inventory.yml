@@ -1,0 +1,91 @@
+---
+all:
+  children:
+    gpu_servers:
+      hosts:
+        gpu-[01:10].provocative.cloud:
+      vars:
+        ansible_user: ubuntu
+        nvidia_driver_version: "535"
+        cuda_version: "12.0"
+        docker_version: "24.0"
+        monitoring_enabled: true
+        gpu_type: "NVIDIA A100"
+        vram_gb: 80
+        carbon_capture_enabled: true
+        environmental_metrics:
+          co2_capture_rate: "50kg/day"
+          power_usage_effectiveness: 1.1
+          water_usage_effectiveness: 1.2
+          carbon_usage_effectiveness: 1.0
+        cooling_system:
+          target_temperature: 20
+          airflow_rate: "2000cfm"
+          humidity_control: true
+
+    monitoring_servers:
+      hosts:
+        monitoring-[01:03].provocative.cloud:
+      vars:
+        ansible_user: ubuntu
+        prometheus_version: "2.44.0"
+        grafana_version: "9.5.0"
+        monitoring_namespace: monitoring
+        retention_days: 90
+        alerting_enabled: true
+        metrics_collection:
+          interval: 60
+          retention_size: "100GB"
+          backup_enabled: true
+        environmental_monitoring:
+          enabled: true
+          metrics:
+            - co2_capture
+            - power_usage
+            - water_usage
+            - temperature
+          alert_thresholds:
+            co2_capture_min: "40kg/day"
+            temperature_max: 25
+            power_usage_max: 1.2
+
+    network_infrastructure:
+      hosts:
+        network-[01:02].provocative.cloud:
+      vars:
+        ansible_user: ubuntu
+        network_config:
+          firewall_enabled: true
+          vpn_enabled: true
+          network_isolation: true
+          ddos_protection: true
+          fail2ban_enabled: true
+          security_groups:
+            - gpu_access
+            - monitoring_access
+          vpc_config:
+            cidr: "10.0.0.0/16"
+            subnets:
+              gpu: "10.0.1.0/24"
+              monitoring: "10.0.2.0/24"
+              management: "10.0.3.0/24"
+          ssl_config:
+            provider: "Let's Encrypt"
+            auto_renewal: true
+            minimum_tls_version: "1.3"
+
+  vars:
+    ansible_ssh_private_key_file: "~/.ssh/provocative_cloud_key"
+    ansible_become: true
+    ansible_become_method: sudo
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    environment: production
+    datacenter: primary
+    region: us-east-1
+    backup_enabled: true
+    monitoring_interval: 60
+    disaster_recovery:
+      enabled: true
+      backup_retention_days: 30
+      failover_region: us-west-2
