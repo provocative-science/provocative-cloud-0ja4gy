@@ -1,0 +1,56 @@
+# Provocative Cloud Platform - Crawler Configuration
+# Last Updated: 2024
+# Public routes are allowed for indexing
+# All authenticated and sensitive routes are protected
+# AI bot access is restricted for data protection
+# Crawl delay enforced to manage server load
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /about
+Allow: /pricing
+Allow: /contact
+Allow: /terms
+Allow: /privacy
+Allow: /sitemap.xml
+Allow: /blog
+Allow: /docs
+Allow: /faq
+Allow: /support
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /gpu
+Disallow: /reservations
+Disallow: /billing
+Disallow: /profile
+Disallow: /settings
+Disallow: /api
+Disallow: /auth
+Disallow: /user
+Disallow: /metrics
+Disallow: /monitoring
+Disallow: /maintenance
+Disallow: /host
+Disallow: /analytics
+Disallow: /payment
+Disallow: /ssh-keys
+Disallow: /notifications
+Disallow: /*.json$
+Disallow: /*.config$
+Crawl-delay: 10
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+Sitemap: https://provocative.cloud/sitemap.xml
