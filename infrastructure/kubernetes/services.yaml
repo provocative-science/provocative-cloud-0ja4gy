@@ -1,0 +1,83 @@
+# Kubernetes version: 1.27+
+# Purpose: Service definitions for Provocative Cloud platform components
+# Enables internal communication and load balancing between microservices
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: provocative-cloud
+  labels:
+    app: backend-api
+    component: api
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8001"
+    prometheus.io/path: "/metrics"
+    prometheus.io/scheme: "http"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+    - port: 8001
+      targetPort: 8001
+      protocol: TCP
+      name: metrics
+  selector:
+    app: backend-api
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3-hour session stickiness
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: provocative-cloud
+  labels:
+    app: frontend
+    component: web
+    tier: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: frontend
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-manager-service
+  namespace: provocative-cloud
+  labels:
+    app: gpu-manager
+    component: infrastructure
+    tier: gpu
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+    prometheus.io/scheme: "http"
+    prometheus.io/scrape-interval: "15s"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: metrics
+  selector:
+    app: gpu-manager
+  sessionAffinity: None
