@@ -1,0 +1,94 @@
+# Kubernetes version: 1.27+
+# Purpose: GPU resource manager deployment for Provocative Cloud platform
+# Manages GPU allocation, monitoring, and carbon capture metrics integration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-manager
+  namespace: provocative-cloud
+  labels:
+    app: gpu-manager
+    component: infrastructure
+    tier: gpu-management
+  annotations:
+    description: "GPU resource manager for Provocative Cloud"
+    security.provocative.cloud/privileged: "required-for-gpu-access"
+spec:
+  replicas: 1  # Single replica as GPU manager should be singleton
+  selector:
+    matchLabels:
+      app: gpu-manager
+  template:
+    metadata:
+      labels:
+        app: gpu-manager
+        security-tier: privileged
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: gpu-manager-sa
+      containers:
+      - name: gpu-manager
+        image: provocative/gpu-manager:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: gpu-manager-config  # References external ConfigMap for configuration
+        resources:
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+        securityContext:
+          privileged: true  # Required for GPU access
+          capabilities:
+            add: ["SYS_ADMIN"]  # Required for GPU management
+          allowPrivilegeEscalation: true
+        volumeMounts:
+        - name: nvidia-driver
+          mountPath: /usr/local/nvidia
+          readOnly: true
+        - name: cuda-libraries
+          mountPath: /usr/local/cuda
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9090
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+      volumes:
+      - name: nvidia-driver
+        hostPath:
+          path: /usr/local/nvidia
+          type: Directory
+      - name: cuda-libraries
+        hostPath:
+          path: /usr/local/cuda
+          type: Directory
+      nodeSelector:
+        gpu: "true"
+        gpu.nvidia.com/class: tesla  # Ensures deployment on nodes with NVIDIA Tesla GPUs
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule  # Allows scheduling on GPU nodes
