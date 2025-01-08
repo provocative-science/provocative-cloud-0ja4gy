@@ -1,0 +1,128 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*$py.class
+**/*.so
+
+# Virtual Environment
+venv
+env
+.env*
+.venv
+ENV
+env.bak
+venv.bak
+
+# Development
+.git
+.gitignore
+.dockerignore
+docker-compose*.yml
+Dockerfile*
+*.yaml
+*.yml
+!docker-compose.yml
+
+# Testing
+tests
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+nosetests.xml
+coverage.xml
+*.cover
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*.sublime-*
+.project
+.pydevproject
+.settings
+
+# Documentation
+docs
+*.md
+*.rst
+*.txt
+LICENSE
+AUTHORS
+
+# Dependencies
+poetry.lock
+requirements*.txt
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Build
+build
+dist
+*.egg-info
+*.egg
+*.manifest
+*.spec
+
+# Logs
+logs
+*.log
+log/
+*.log.*
+
+# Local Development
+.env.example
+setup.cfg
+alembic.ini
+*.ipynb
+jupyter/
+.jupyter
+
+# Cache and Temporary
+*.tmp
+*.bak
+*.swp
+*.cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+
+# Security
+*_key*
+*.pem
+*.key
+*.crt
+*.csr
+secrets/
+credentials/
+
+# GPU Development
+gpu_manager/cuda_utils.py
+*.cu
+*.cubin
+*.ptx
+
+# Profiling
+*.prof
+*.stats
+profile_results/
+benchmarks/
+
+# CI/CD
+.github/
+.gitlab/
+.circleci/
+jenkins/
+*.jenkinsfile
+
+# Miscellaneous
+.DS_Store
+Thumbs.db
+*.bak
+*.orig
+*.rej
