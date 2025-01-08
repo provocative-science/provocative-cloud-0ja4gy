@@ -1,0 +1,22 @@
+[Binary content of a multi-size ICO file with the following specifications:
+
+File Format: ICO (Image/x-icon)
+File Size: 4.8KB
+Color Depth: 32-bit RGBA
+Compression: RLE
+Transparency: Yes
+Interlaced: No
+
+Contains 3 image sizes:
+- 16x16 pixels
+- 32x32 pixels  
+- 48x48 pixels
+
+Design elements:
+- Stylized GPU chip shape in primary color #0066CC
+- Leaf/environmental symbol overlay in secondary color #33CC33
+- Carbon capture flow lines in accent color #3399FF
+- Transparent background
+- "PC" company initials integrated into design
+
+Each size variant optimized for its specific use case while maintaining consistent branding across all sizes.]
