@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Character encoding -->
+  <meta charset="UTF-8">
+
+  <!-- Responsive viewport configuration -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <!-- Primary Meta Tags -->
+  <meta name="description" content="Provocative Cloud - GPU rental platform with integrated carbon capture technology. Access high-performance GPU resources while contributing to environmental sustainability.">
+  <meta name="theme-color" content="#0066CC">
+
+  <!-- Open Graph Meta Tags -->
+  <meta property="og:title" content="Provocative Cloud - GPU Rental Platform">
+  <meta property="og:description" content="Access high-performance GPU resources while contributing to environmental sustainability">
+  <meta property="og:type" content="website">
+
+  <!-- iOS Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Security Headers -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.provocative.cloud wss://ws.provocative.cloud;">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()">
+
+  <!-- PWA Support -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+
+  <!-- Resource Hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://api.provocative.cloud">
+  <link rel="preconnect" href="https://ws.provocative.cloud">
+
+  <!-- Title -->
+  <title>Provocative Cloud - GPU Rental Platform</title>
+
+  <!-- Development Tools - Only included in development mode -->
+  <% if (process.env.NODE_ENV === 'development') { %>
+  <script type="module" src="@vite/client"></script>
+  <% } %>
+</head>
+<body>
+  <!-- Application Root -->
+  <div id="root" role="main">
+    <!-- Initial Loading State -->
+    <div aria-live="polite" role="status" class="initial-load">
+      Loading Provocative Cloud...
+    </div>
+  </div>
+
+  <!-- No JavaScript Fallback -->
+  <noscript>
+    <div class="noscript-message">
+      JavaScript is required to run this application. Please enable JavaScript in your browser settings.
+    </div>
+  </noscript>
+
+  <!-- Main Application Bundle -->
+  <script type="module" src="./src/index.tsx"></script>
+</body>
+</html>
