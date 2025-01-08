@@ -1,0 +1,28 @@
+node_modules/**
+
+# Build outputs
+build/**
+dist/**
+
+# Test coverage
+coverage/**
+
+# Static assets
+public/**
+
+# Configuration files
+*.config.js
+vite.config.ts
+jest.config.ts
+
+# Type definitions
+*.d.ts
+
+# Minified files
+*.min.js
+*.min.css
+
+# Package management
+package.json
+package-lock.json
+yarn.lock
