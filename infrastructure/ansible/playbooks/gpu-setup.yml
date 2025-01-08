@@ -1,0 +1,133 @@
+---
+# Ansible playbook for GPU server provisioning and configuration
+# Version: 2.15+ (ansible.builtin)
+# Version: 3.4.0 (community.docker)
+
+- name: GPU Server Setup and Configuration
+  hosts: gpu_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    nvidia_driver_version: "{{ hostvars[inventory_hostname].nvidia_driver_version | default('535.104.05') }}"
+    cuda_version: "{{ hostvars[inventory_hostname].cuda_version | default('12.0.0') }}"
+    docker_version: "{{ hostvars[inventory_hostname].docker_version | default('24.0') }}"
+    monitoring_enabled: "{{ hostvars[inventory_hostname].monitoring_enabled | default(true) }}"
+    power_management_enabled: "{{ hostvars[inventory_hostname].power_management_enabled | default(true) }}"
+    power_management_profile: "{{ hostvars[inventory_hostname].power_management_profile | default('balanced') }}"
+    thermal_threshold_celsius: "{{ hostvars[inventory_hostname].thermal_threshold_celsius | default(75) }}"
+    carbon_capture_enabled: "{{ hostvars[inventory_hostname].carbon_capture_enabled | default(true) }}"
+    carbon_capture_threshold: "{{ hostvars[inventory_hostname].carbon_capture_threshold | default(0.5) }}"
+
+  pre_tasks:
+    - name: Check system requirements
+      block:
+        - name: Verify minimum system requirements
+          ansible.builtin.assert:
+            that:
+              - ansible_memtotal_mb >= 16384  # Minimum 16GB RAM
+              - ansible_processor_cores >= 4   # Minimum 4 cores
+            fail_msg: "System does not meet minimum requirements"
+
+        - name: Check for required directories
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: '0755'
+          loop:
+            - /etc/nvidia
+            - /etc/docker
+            - /etc/prometheus
+            - /var/log/nvidia
+            - /var/log/carbon-capture
+
+        - name: Verify kernel parameters
+          ansible.builtin.sysctl:
+            name: "{{ item.name }}"
+            value: "{{ item.value }}"
+            state: present
+            sysctl_file: /etc/sysctl.d/99-gpu-setup.conf
+          loop:
+            - { name: 'vm.swappiness', value: '10' }
+            - { name: 'vm.dirty_ratio', value: '10' }
+            - { name: 'vm.dirty_background_ratio', value: '5' }
+
+  roles:
+    - role: gpu
+      vars:
+        nvidia_driver_version: "{{ nvidia_driver_version }}"
+        cuda_version: "{{ cuda_version }}"
+        docker_version: "{{ docker_version }}"
+        monitoring_enabled: "{{ monitoring_enabled }}"
+        power_management_enabled: "{{ power_management_enabled }}"
+        power_management_profile: "{{ power_management_profile }}"
+        thermal_threshold_celsius: "{{ thermal_threshold_celsius }}"
+        carbon_capture_enabled: "{{ carbon_capture_enabled }}"
+        carbon_capture_threshold: "{{ carbon_capture_threshold }}"
+
+  post_tasks:
+    - name: Verify GPU setup
+      block:
+        - name: Check GPU detection
+          ansible.builtin.command: nvidia-smi
+          register: nvidia_smi_result
+          changed_when: false
+          failed_when: nvidia_smi_result.rc != 0
+
+        - name: Verify CUDA functionality
+          ansible.builtin.command: nvcc --version
+          register: cuda_result
+          changed_when: false
+          failed_when: cuda_result.rc != 0
+
+        - name: Test Docker GPU support
+          community.docker.docker_container:
+            name: nvidia-smi-test
+            image: nvidia/cuda:{{ cuda_version }}-base
+            command: nvidia-smi
+            auto_remove: true
+          register: docker_gpu_test
+
+        - name: Verify monitoring setup
+          ansible.builtin.uri:
+            url: http://localhost:9400/metrics
+            return_content: yes
+          register: dcgm_metrics
+          failed_when: "'DCGM_FI_DEV_GPU_TEMP' not in dcgm_metrics.content"
+
+        - name: Verify power management
+          ansible.builtin.command: nvidia-smi --query-gpu=power.management --format=csv,noheader
+          register: power_management_result
+          changed_when: false
+          failed_when: "'Enabled' not in power_management_result.stdout"
+
+        - name: Generate environmental baseline report
+          ansible.builtin.template:
+            src: environmental-baseline.j2
+            dest: /var/log/carbon-capture/baseline-{{ ansible_date_time.date }}.json
+            mode: '0644'
+
+    - name: Final validation
+      ansible.builtin.assert:
+        that:
+          - nvidia_smi_result.rc == 0
+          - cuda_result.rc == 0
+          - docker_gpu_test is success
+          - "'DCGM_FI_DEV_GPU_TEMP' in dcgm_metrics.content
+          - "'Enabled' in power_management_result.stdout"
+        fail_msg: "GPU setup validation failed"
+        success_msg: "GPU setup completed successfully with all components verified"
+
+  handlers:
+    - name: restart_services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - nvidia-persistenced
+        - docker
+        - dcgm-exporter
+        - prometheus-node-exporter
+        - carbon-capture-service
+      register: service_restart
+      listen: restart_all_services
