@@ -1,0 +1,87 @@
+{
+  "name": "Provocative Cloud",
+  "short_name": "ProvCloud",
+  "description": "GPU rental platform with integrated carbon capture technology",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0066CC",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "prefer_related_applications": false,
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/dashboard",
+      "description": "View GPU rentals and metrics",
+      "icons": [
+        {
+          "src": "icons/dashboard-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "New Rental",
+      "url": "/rent",
+      "description": "Rent a new GPU instance",
+      "icons": [
+        {
+          "src": "icons/rent-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/dashboard.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "platform": "wide",
+      "label": "Dashboard View"
+    }
+  ],
+  "related_applications": [],
+  "dir": "auto",
+  "lang": "en",
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
+  "iarc_rating_id": "",
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
