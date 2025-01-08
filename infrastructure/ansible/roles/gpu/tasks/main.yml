@@ -1,0 +1,174 @@
+---
+# Ansible tasks for GPU server setup and configuration
+# ansible.builtin version: 2.15+
+# community.docker version: 3.4.0
+
+- name: Pre-installation system validation
+  block:
+    - name: Check for supported GPU hardware
+      ansible.builtin.command: lspci | grep -i nvidia
+      register: gpu_check
+      changed_when: false
+      failed_when: gpu_check.rc != 0
+
+    - name: Update package cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required dependencies
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - linux-headers-{{ ansible_kernel }}
+          - pkg-config
+          - dkms
+          - software-properties-common
+        state: present
+
+    - name: Disable nouveau driver
+      ansible.builtin.lineinfile:
+        path: /etc/modprobe.d/blacklist-nouveau.conf
+        line: "blacklist nouveau"
+        create: yes
+      register: nouveau_disabled
+
+    - name: Update initramfs if nouveau was disabled
+      ansible.builtin.command: update-initramfs -u
+      when: nouveau_disabled.changed
+
+- name: Install NVIDIA GPU drivers
+  block:
+    - name: Add NVIDIA repository
+      ansible.builtin.apt_repository:
+        repo: "ppa:graphics-drivers/ppa"
+        state: present
+
+    - name: Install NVIDIA drivers
+      ansible.builtin.apt:
+        name: "nvidia-driver-{{ nvidia_driver_version }}"
+        state: present
+      notify: restart_nvidia_services
+
+    - name: Install NVIDIA CUDA toolkit
+      ansible.builtin.apt:
+        name: "nvidia-cuda-toolkit={{ cuda_version }}*"
+        state: present
+      notify: restart_nvidia_services
+
+    - name: Configure persistence mode
+      ansible.builtin.command: nvidia-smi -pm 1
+      changed_when: false
+
+- name: Configure Docker with NVIDIA runtime
+  block:
+    - name: Install Docker
+      ansible.builtin.apt:
+        name: "docker-ce={{ docker_version }}*"
+        state: present
+
+    - name: Install NVIDIA Container Toolkit
+      ansible.builtin.apt:
+        name:
+          - nvidia-container-toolkit
+          - nvidia-container-runtime
+        state: present
+
+    - name: Configure Docker daemon with NVIDIA runtime
+      community.docker.docker_daemon_config:
+        data:
+          default-runtime: "nvidia"
+          runtimes:
+            nvidia:
+              path: "/usr/bin/nvidia-container-runtime"
+              runtimeArgs: []
+      notify: restart_docker
+
+- name: Setup monitoring and metrics collection
+  when: monitoring_enabled | bool
+  block:
+    - name: Install NVIDIA Data Center GPU Manager (DCGM)
+      ansible.builtin.apt:
+        name: datacenter-gpu-manager
+        state: present
+
+    - name: Configure DCGM metrics collection
+      ansible.builtin.template:
+        src: dcgm-exporter.yaml.j2
+        dest: /etc/dcgm-exporter/dcgm-exporter.yaml
+        mode: '0644'
+
+    - name: Configure power management
+      when: power_management_enabled | bool
+      block:
+        - name: Set power management profile
+          ansible.builtin.command: "nvidia-smi -pm ENABLED -pl {{ power_management_profile }}"
+          changed_when: false
+
+        - name: Configure thermal thresholds
+          ansible.builtin.command: "nvidia-smi --gpu-reset-temperature-threshold={{ thermal_threshold_celsius }}"
+          changed_when: false
+
+- name: Setup environmental impact monitoring
+  when: carbon_capture_integration | bool
+  block:
+    - name: Install environmental metrics collector
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: present
+
+    - name: Configure environmental metrics collection
+      ansible.builtin.template:
+        src: environmental-metrics.yaml.j2
+        dest: /etc/prometheus/environmental-metrics.yaml
+        mode: '0644'
+
+    - name: Enable and start services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - nvidia-persistenced
+        - dcgm-exporter
+        - prometheus-node-exporter
+
+- name: Verify installation
+  block:
+    - name: Check NVIDIA driver status
+      ansible.builtin.command: nvidia-smi
+      changed_when: false
+      register: nvidia_smi_check
+
+    - name: Verify CUDA installation
+      ansible.builtin.command: nvcc --version
+      changed_when: false
+      register: cuda_check
+
+    - name: Verify monitoring services
+      ansible.builtin.service_facts:
+      register: service_status
+
+    - name: Assert all services are running
+      ansible.builtin.assert:
+        that:
+          - "'nvidia-persistenced.service' in service_status.ansible_facts.services"
+          - "'dcgm-exporter.service' in service_status.ansible_facts.services"
+          - "'prometheus-node-exporter.service' in service_status.ansible_facts.services"
+        fail_msg: "Required services are not running"
+        success_msg: "All GPU services are running correctly"
+
+handlers:
+  - name: restart_nvidia_services
+    ansible.builtin.service:
+      name: "{{ item }}"
+      state: restarted
+    loop:
+      - nvidia-persistenced
+      - dcgm-exporter
+    register: service_restart
+
+  - name: restart_docker
+    ansible.builtin.service:
+      name: docker
+      state: restarted
