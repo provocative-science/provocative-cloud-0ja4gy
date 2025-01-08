@@ -1,0 +1,190 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Environment variables available to all jobs and steps
+env:
+  ENVIRONMENT: staging
+  KUBERNETES_NAMESPACE: provocative-cloud-staging
+  AWS_REGION: us-west-2
+  DEPLOYMENT_ID: ${{ github.sha }}-${{ github.run_number }}
+  DOCKER_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+  LOG_LEVEL: debug
+
+# Limit concurrent deployments to staging
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-staging
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Validate Kubernetes manifests
+        run: |
+          kubectl kustomize infrastructure/kubernetes | kubeval --strict --kubernetes-version 1.27.0
+          
+      - name: Security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+  build:
+    name: Build and Push Images
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-staging
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/backend:${{ env.DEPLOYMENT_ID }}
+            ${{ env.DOCKER_REGISTRY }}/backend:staging-latest
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/backend:staging-latest
+          cache-to: type=inline
+          build-args: |
+            ENVIRONMENT=staging
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/frontend:${{ env.DEPLOYMENT_ID }}
+            ${{ env.DOCKER_REGISTRY }}/frontend:staging-latest
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/frontend:staging-latest
+          cache-to: type=inline
+          build-args: |
+            ENVIRONMENT=staging
+
+  deploy:
+    name: Deploy to Staging
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+      deployments: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-staging
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --name provocative-staging --region ${{ env.AWS_REGION }}
+
+      - name: Update deployment manifests
+        run: |
+          # Update image tags in deployment manifests
+          sed -i "s|image: .*backend:.*|image: ${{ env.DOCKER_REGISTRY }}/backend:${{ env.DEPLOYMENT_ID }}|" infrastructure/kubernetes/backend-deployment.yaml
+          sed -i "s|image: .*frontend:.*|image: ${{ env.DOCKER_REGISTRY }}/frontend:${{ env.DEPLOYMENT_ID }}|" infrastructure/kubernetes/frontend-deployment.yaml
+
+      - name: Deploy to staging
+        run: |
+          # Apply ConfigMaps and Secrets first
+          kubectl apply -f infrastructure/kubernetes/configmaps.yaml
+          kubectl apply -f infrastructure/kubernetes/secrets.yaml
+          
+          # Deploy applications with zero-downtime rolling update
+          kubectl apply -f infrastructure/kubernetes/backend-deployment.yaml
+          kubectl apply -f infrastructure/kubernetes/frontend-deployment.yaml
+          
+          # Wait for rollout completion
+          kubectl rollout status deployment/backend-api -n ${{ env.KUBERNETES_NAMESPACE }} --timeout=300s
+          kubectl rollout status deployment/frontend -n ${{ env.KUBERNETES_NAMESPACE }} --timeout=300s
+
+      - name: Verify deployment
+        run: |
+          # Health check endpoints
+          BACKEND_HEALTH=$(kubectl exec deploy/backend-api -n ${{ env.KUBERNETES_NAMESPACE }} -- curl -s http://localhost:8000/health)
+          FRONTEND_HEALTH=$(kubectl exec deploy/frontend -n ${{ env.KUBERNETES_NAMESPACE }} -- curl -s http://localhost:80/health)
+          
+          if [[ $BACKEND_HEALTH != *"healthy"* ]] || [[ $FRONTEND_HEALTH != *"healthy"* ]]; then
+            echo "Health check failed"
+            exit 1
+          fi
+
+  post-deploy:
+    name: Post-deployment Tasks
+    needs: deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Run smoke tests
+        run: |
+          # Execute basic functionality tests
+          curl -f https://staging.provocative.cloud/api/v1/health
+          curl -f https://staging.provocative.cloud/health
+
+      - name: Monitor deployment
+        run: |
+          # Check deployment metrics and logs
+          kubectl logs -l app=backend-api -n ${{ env.KUBERNETES_NAMESPACE }} --tail=100
+          kubectl logs -l app=frontend -n ${{ env.KUBERNETES_NAMESPACE }} --tail=100
+
+      - name: Notify deployment status
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: 'staging-deployments'
+          slack-message: |
+            Deployment to staging ${{ job.status }}
+            Environment: staging
+            Commit: ${{ github.sha }}
+            Workflow: ${{ github.workflow }}
+            ${{ job.status == 'success' && '✅ Deploy successful' || '❌ Deploy failed' }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
