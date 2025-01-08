@@ -1,0 +1,105 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: provocative-cloud
+  labels:
+    app: backend-api
+    component: config
+    environment: production
+data:
+  # Core API Settings
+  PROJECT_NAME: "Provocative Cloud"
+  API_VERSION: "v1"
+  API_PREFIX: "/api/v1"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Database and Cache Settings
+  DATABASE_URL: "postgresql://postgres@postgres:5432/provocative"
+  DATABASE_POOL_SIZE: "20"
+  DATABASE_MAX_OVERFLOW: "10"
+  REDIS_URL: "redis://redis:6379/0"
+  REDIS_POOL_SIZE: "20"
+  
+  # Security Settings
+  CORS_ORIGINS: "https://app.provocative.cloud,https://api.provocative.cloud,https://admin.provocative.cloud"
+  RATE_LIMIT_USER: "1000"
+  RATE_LIMIT_HOST: "5000"
+  RATE_LIMIT_BURST: "100"
+  RATE_LIMIT_WINDOW: "3600"
+  
+  # Monitoring Settings
+  METRICS_COLLECTION_INTERVAL: "30"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-manager-config
+  namespace: provocative-cloud
+  labels:
+    app: gpu-manager
+    component: config
+    environment: production
+data:
+  # GPU Driver Settings
+  NVIDIA_DRIVER_PATH: "/usr/local/nvidia"
+  NVIDIA_SMI_PATH: "/usr/bin/nvidia-smi"
+  
+  # Resource Management
+  GPU_POLLING_INTERVAL: "15"
+  MAX_POWER_LIMIT_WATTS: "300"
+  MIN_POWER_LIMIT_WATTS: "100"
+  DEFAULT_MEMORY_ALLOCATION: "90"
+  
+  # Monitoring Thresholds
+  TEMPERATURE_ALERT_THRESHOLD: "80.0"
+  UTILIZATION_ALERT_THRESHOLD: "95.0"
+  
+  # Hardware Management
+  ENABLE_POWER_MANAGEMENT: "true"
+  ENABLE_ECC: "true"
+  ALLOWED_COMPUTE_MODES: "0,2"  # Default and Exclusive_Process
+  
+  # Environmental Controls
+  COOLING_SYSTEM_INTEGRATION: "true"
+  ENVIRONMENTAL_METRICS_ENABLED: "true"
+  POWER_EFFICIENCY_MODE: "balanced"
+  THERMAL_THROTTLING_ENABLED: "true"
+  CARBON_EFFICIENCY_TARGET: "0.85"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: provocative-cloud
+  labels:
+    app: monitoring
+    component: config
+    environment: production
+data:
+  # Prometheus Settings
+  PROMETHEUS_RETENTION_DAYS: "30"
+  METRICS_SCRAPE_INTERVAL: "15s"
+  METRICS_EVALUATION_INTERVAL: "30s"
+  
+  # Grafana Settings
+  GRAFANA_ANONYMOUS_ACCESS: "false"
+  ALERT_NOTIFICATION_CHANNELS: "slack,email,pagerduty"
+  
+  # Environmental Monitoring
+  CARBON_METRICS_ENABLED: "true"
+  CARBON_METRICS_INTERVAL: "300"
+  CARBON_CAPTURE_MONITORING: "true"
+  ENVIRONMENTAL_ALERT_THRESHOLDS: "true"
+  
+  # Resource Efficiency Tracking
+  COOLING_EFFICIENCY_METRICS: "true"
+  POWER_USAGE_TRACKING: "true"
+  WATER_USAGE_TRACKING: "true"
+  PUE_MONITORING_ENABLED: "true"
+  CUE_MONITORING_ENABLED: "true"
+  WUE_MONITORING_ENABLED: "true"
