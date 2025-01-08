@@ -1,0 +1,249 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: provocative-cloud
+  labels:
+    app: fluentd
+    component: logging
+    security-tier: restricted
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: provocative-cloud
+  labels:
+    app: fluentd
+    component: logging
+    security-tier: restricted
+data:
+  fluent.conf: |
+    # System-wide configurations
+    <system>
+      log_level info
+      workers 4
+      root_dir /fluentd/log
+      <log>
+        format json
+        time_format %Y-%m-%d %H:%M:%S
+      </log>
+    </system>
+
+    # Monitoring configurations
+    <source>
+      @type monitor_agent
+      bind 0.0.0.0
+      port 24231
+      tag fluentd.monitor
+    </source>
+
+    # System logs input
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      pos_file /fluentd/log/containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type json
+        time_key time
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+
+    # Kubernetes metadata enrichment
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+      kubernetes_url "#{ENV['KUBERNETES_URL']}"
+      bearer_token_file /var/run/secrets/kubernetes.io/serviceaccount/token
+      ca_file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      skip_labels false
+      skip_container_metadata false
+      skip_namespace_metadata false
+    </filter>
+
+    # Sensitive data masking
+    <filter kubernetes.**>
+      @type record_transformer
+      enable_ruby true
+      <record>
+        message ${record["message"].gsub(/(?<=[&?]password=)[^&]+/, '[MASKED]')}
+        log ${record["log"].gsub(/(?<=[&?]password=)[^&]+/, '[MASKED]')} if record["log"]
+      </record>
+    </filter>
+
+    # Output to Elasticsearch with security
+    <match kubernetes.**>
+      @type elasticsearch
+      host "#{ENV['FLUENT_ELASTICSEARCH_HOST']}"
+      port "#{ENV['FLUENT_ELASTICSEARCH_PORT']}"
+      scheme https
+      ssl_verify true
+      ssl_version TLSv1_2
+      user "#{ENV['ELASTICSEARCH_USER']}"
+      password "#{ENV['ELASTICSEARCH_PASSWORD']}"
+      client_cert /fluentd/certs/client.crt
+      client_key /fluentd/certs/client.key
+      ca_file /fluentd/certs/ca.crt
+      
+      logstash_format true
+      logstash_prefix k8s-logs
+      index_name k8s-logs
+      type_name fluentd
+      
+      <buffer>
+        @type file
+        path /fluentd/log/buffer
+        flush_mode interval
+        retry_type exponential_backoff
+        flush_interval 5s
+        retry_forever false
+        retry_max_interval 30
+        chunk_limit_size 2M
+        queue_limit_length 8
+        overflow_action block
+      </buffer>
+    </match>
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: provocative-cloud
+  labels:
+    app: fluentd
+    component: logging
+    security-tier: restricted
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "24231"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+        security-tier: restricted
+    spec:
+      serviceAccountName: fluentd
+      securityContext:
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: fluentd
+          image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-elasticsearch7-1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: FLUENT_ELASTICSEARCH_HOST
+              value: elasticsearch.provocative-cloud.svc.cluster.local
+            - name: FLUENT_ELASTICSEARCH_PORT
+              value: "9200"
+            - name: FLUENT_ELASTICSEARCH_SSL_VERIFY
+              value: "true"
+            - name: ELASTICSEARCH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: username
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
+            - name: KUBERNETES_URL
+              value: "https://kubernetes.default.svc"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: config
+              mountPath: /fluentd/etc
+            - name: elasticsearch-certs
+              mountPath: /fluentd/certs
+              readOnly: true
+            - name: buffer
+              mountPath: /fluentd/log
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 24231
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 24231
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: config
+          configMap:
+            name: fluentd-config
+        - name: elasticsearch-certs
+          secret:
+            secretName: elasticsearch-certificates
+        - name: buffer
+          emptyDir: {}
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+
+---
+apiVersion: policy/v1
+kind: PodSecurityPolicy
+metadata:
+  name: fluentd-psp
+  namespace: provocative-cloud
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - configMap
+    - secret
+    - hostPath
+    - emptyDir
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: MustRunAsNonRoot
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: MustRunAs
+    ranges:
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: true
