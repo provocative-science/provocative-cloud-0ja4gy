@@ -1,0 +1,101 @@
+node_modules
+.npm
+.npm-cache
+.yarn
+.pnpm
+yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist
+build
+coverage
+*.tsbuildinfo
+
+# Version control
+.git
+.gitignore
+
+# Environment and secrets
+.env*
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Development configurations
+.vscode
+.idea
+*.swp
+*.swo
+.editorconfig
+.eslintrc*
+.prettierrc*
+tsconfig*.json
+webpack*.js
+babel.config.js
+jest.config.*
+.browserslistrc
+
+# Test files
+__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/test-utils
+jest.setup.js
+coverage
+
+# Documentation
+*.md
+LICENSE
+docs
+CHANGELOG.md
+CONTRIBUTING.md
+
+# Docker files
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+*.log
+*.pid
+*.seed
+
+# Temporary files
+tmp
+temp
+*.tmp
+*~
+
+# IDE specific files
+.settings
+.project
+.classpath
+.factorypath
+*.sublime-*
+*.iml
+.idea
+
+# Package manager locks (include only yarn.lock or package-lock.json)
+pnpm-lock.yaml
+.pnpm-store
+
+# Misc development files
+.husky
+.storybook
+storybook-static
+public/mockServiceWorker.js
+cypress
+e2e
+**/__mocks__
+*.config.js
+*.config.ts
+.stylelintrc*
+.commitlintrc*
