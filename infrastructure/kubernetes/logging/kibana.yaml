@@ -1,0 +1,181 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: provocative-cloud
+  labels:
+    app: kibana
+    component: logging
+    security-tier: restricted
+data:
+  kibana.yml: |
+    server.name: provocative-kibana
+    server.host: "0.0.0.0"
+    server.ssl.enabled: true
+    server.ssl.certificate: /etc/kibana/certs/tls.crt
+    server.ssl.key: /etc/kibana/certs/tls.key
+    
+    elasticsearch.hosts: ["https://elasticsearch:9200"]
+    elasticsearch.ssl.verificationMode: certificate
+    elasticsearch.ssl.certificate: /etc/kibana/certs/elasticsearch-client.crt
+    elasticsearch.ssl.key: /etc/kibana/certs/elasticsearch-client.key
+    elasticsearch.ssl.certificateAuthorities: ["/etc/kibana/certs/ca.crt"]
+    
+    xpack.security.enabled: true
+    xpack.security.encryptionKey: ${SECURITY_ENCRYPTION_KEY}
+    xpack.reporting.encryptionKey: ${REPORTING_ENCRYPTION_KEY}
+    xpack.encryptedSavedObjects.encryptionKey: ${SAVED_OBJECTS_ENCRYPTION_KEY}
+    
+    monitoring.ui.container.elasticsearch.enabled: true
+    
+    logging.appenders.file.type: file
+    logging.appenders.file.fileName: /var/log/kibana/kibana.log
+    logging.appenders.file.layout.type: json
+    logging.root.appenders: ["file"]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: provocative-cloud
+  labels:
+    app: kibana
+    component: logging
+    security-tier: restricted
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+        security-tier: restricted
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5601"
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsNonRoot: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - kibana
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:8.0 # version: 8.0+
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5601
+          name: https
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "https://elasticsearch:9200"
+        - name: ELASTICSEARCH_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: kibana-credentials
+              key: username
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: kibana-credentials
+              key: password
+        - name: SECURITY_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kibana-security
+              key: security-key
+        - name: REPORTING_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kibana-security
+              key: reporting-key
+        - name: SAVED_OBJECTS_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: kibana-security
+              key: saved-objects-key
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+        - name: certs
+          mountPath: /etc/kibana/certs
+          readOnly: true
+        - name: logs
+          mountPath: /var/log/kibana
+        livenessProbe:
+          httpGet:
+            path: /api/status
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/status
+            port: https
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: kibana-config
+      - name: certs
+        secret:
+          secretName: kibana-certs
+      - name: logs
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: provocative-cloud
+  labels:
+    app: kibana
+    component: logging
+    security-tier: restricted
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5601"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5601
+    targetPort: 5601
+    protocol: TCP
+    name: https
+  selector:
+    app: kibana
