@@ -1,0 +1,50 @@
+# Last Updated: 2024
+#
+# This file defines code ownership and required reviewers for different parts of the platform.
+# Files will be automatically assigned for review based on these rules.
+# Rules are evaluated from bottom to top, with the last matching pattern taking precedence.
+
+# Backend Services and GPU Management
+src/backend/                     @backend-team @gpu-team
+src/backend/api/security/        @security-team @backend-team
+src/backend/gpu_manager/         @gpu-team @backend-team
+src/backend/tests/              @backend-team @qa-team
+
+# Frontend Application
+src/web/                        @frontend-team
+src/web/src/components/gpu/     @frontend-team @gpu-team
+src/web/tests/                  @frontend-team @qa-team
+
+# Infrastructure and Deployment
+infrastructure/                 @devops-team
+infrastructure/kubernetes/      @devops-team @gpu-team
+
+# Documentation
+docs/                          @tech-writers @backend-team @frontend-team @gpu-team
+
+# Configuration
+config/                        @devops-team @security-team
+.env.example                   @devops-team @security-team
+
+# CI/CD Pipeline
+.github/workflows/             @devops-team
+
+# Security-Critical Files
+**/security*                   @security-team
+
+# Default Owners
+*                             @tech-leads
+
+# Special Rules
+# 1. Security-critical changes require security team approval
+# 2. GPU-related changes require GPU team review
+# 3. Test changes require QA team sign-off
+# 4. Configuration changes require DevOps review
+# 5. All changes must be approved by at least one tech lead
+
+# Review Requirements:
+# - Critical security changes require 2 security team approvals
+# - GPU infrastructure changes require both GPU and DevOps approval
+# - API changes require backend team and relevant feature team approval
+# - Frontend changes require UI/UX review and relevant feature team approval
+# - Infrastructure changes require DevOps and Security review
