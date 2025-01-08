@@ -1,0 +1,138 @@
+# Kubernetes version: 1.27+
+# NVIDIA Device Plugin version: 0.14.0
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gpu-metrics-exporter
+  namespace: monitoring
+  labels:
+    app: gpu-metrics-exporter
+    component: monitoring
+    app.kubernetes.io/name: gpu-metrics-exporter
+    app.kubernetes.io/part-of: provocative-cloud-platform
+    app.kubernetes.io/component: monitoring
+  annotations:
+    description: "GPU metrics exporter for NVIDIA GPUs with environmental monitoring"
+spec:
+  selector:
+    matchLabels:
+      app: gpu-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app: gpu-metrics-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9400"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: gpu-metrics-exporter
+        image: provocative/gpu-metrics-exporter:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9400
+          name: metrics
+          protocol: TCP
+        volumeMounts:
+        - name: nvidia-driver
+          mountPath: /usr/local/nvidia
+        - name: pod-gpu-resources
+          mountPath: /var/lib/kubelet/pod-resources
+        env:
+        - name: METRICS_COLLECTION_INTERVAL
+          value: "60"
+        - name: TEMPERATURE_ALERT_THRESHOLD
+          value: "80.0"
+        - name: MEMORY_ALERT_THRESHOLD
+          value: "0.95"
+        - name: CARBON_INTENSITY_FACTOR
+          value: "0.475"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["SYS_ADMIN"]
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: metrics
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: nvidia-driver
+        hostPath:
+          path: /usr/local/nvidia
+      - name: pod-gpu-resources
+        hostPath:
+          path: /var/lib/kubelet/pod-resources
+      nodeSelector:
+        gpu: "true"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-metrics-exporter
+  namespace: monitoring
+  labels:
+    app: gpu-metrics-exporter
+    component: monitoring
+    app.kubernetes.io/name: gpu-metrics-exporter
+    app.kubernetes.io/part-of: provocative-cloud-platform
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9400"
+spec:
+  ports:
+  - port: 9400
+    targetPort: 9400
+    protocol: TCP
+    name: metrics
+  selector:
+    app: gpu-metrics-exporter
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gpu-metrics-exporter
+  namespace: monitoring
+  labels:
+    app: gpu-metrics-exporter
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: gpu-metrics-exporter
+  endpoints:
+  - port: metrics
+    interval: 60s
+    path: /metrics
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'nvidia_gpu_.*'
+      action: keep
+    - sourceLabels: [__name__]
+      regex: 'provocative_gpu_carbon_.*'
+      action: keep
