@@ -1,0 +1,141 @@
+[[package]]
+name = "fastapi"
+version = "0.100.0"
+description = "High-performance web framework for building APIs"
+category = "main"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "fastapi-0.100.0.tar.gz", hash = "sha256:abc123..."},
+]
+
+[package.dependencies]
+pydantic = ">=2.0.0"
+starlette = ">=0.27.0"
+
+[[package]]
+name = "uvicorn"
+version = "0.23.0"
+description = "Lightning-fast ASGI server implementation"
+category = "main"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "uvicorn-0.23.0.tar.gz", hash = "sha256:def456..."},
+]
+
+[package.dependencies]
+click = ">=7.0"
+h11 = ">=0.8"
+
+[[package]]
+name = "sqlalchemy"
+version = "2.0.0"
+description = "SQL toolkit and ORM for database operations"
+category = "main"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "SQLAlchemy-2.0.0.tar.gz", hash = "sha256:ghi789..."},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.2.0"
+
+[[package]]
+name = "pydantic"
+version = "2.0.0"
+description = "Data validation using Python type annotations"
+category = "main"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "pydantic-2.0.0.tar.gz", hash = "sha256:jkl012..."},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.6.1"
+
+[[package]]
+name = "nvidia-ml-py"
+version = "11.525.0"
+description = "Python bindings for NVIDIA Management Library for GPU monitoring"
+category = "main"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "nvidia-ml-py-11.525.0.tar.gz", hash = "sha256:mno345..."},
+]
+
+[[package]]
+name = "prometheus-client"
+version = "0.17.0"
+description = "Python client for Prometheus monitoring system"
+category = "main"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "prometheus_client-0.17.0.tar.gz", hash = "sha256:pqr678..."},
+]
+
+[[package]]
+name = "pytest"
+version = "7.4.0"
+description = "Testing framework for Python"
+category = "dev"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "pytest-7.4.0.tar.gz", hash = "sha256:stu901..."},
+]
+
+[package.dependencies]
+iniconfig = "*"
+packaging = "*"
+pluggy = ">=1.0"
+
+[[package]]
+name = "black"
+version = "23.7.0"
+description = "The uncompromising code formatter"
+category = "dev"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "black-23.7.0.tar.gz", hash = "sha256:vwx234..."},
+]
+
+[package.dependencies]
+click = ">=8.0.0"
+mypy-extensions = ">=0.4.3"
+
+[[package]]
+name = "mypy"
+version = "1.4.0"
+description = "Optional static type checker for Python"
+category = "dev"
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "mypy-1.4.0.tar.gz", hash = "sha256:yz5678..."},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.5.0"
+mypy-extensions = ">=1.0.0"
+
+[metadata]
+lock-version = "2.0"
+python-versions = "^3.10"
+content-hash = "sha256:unique_hash_based_on_locked_dependencies_and_versions"
+generated-at = "2023-07-20T12:00:00Z"
+poetry-version = "1.7.0"
+platform = "linux"
+implementation = "CPython"
+
+[metadata.files]
+
+[security]
+verify-hashes = true
+verify-dependencies = true
+sources = ["https://pypi.org/simple"]
