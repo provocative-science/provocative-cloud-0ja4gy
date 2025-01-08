@@ -1,0 +1,187 @@
+---
+# Ansible tasks for network configuration and security setup
+# ansible.builtin version: 2.15+
+# ansible.posix version: 1.5+
+# community.general version: 7.0+
+
+- name: Install Network Packages
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - fail2ban
+      - wireguard
+      - openvswitch-switch
+      - iptables
+      - net-tools
+      - prometheus-node-exporter
+      - nftables
+      - conntrack
+    state: present
+    update_cache: yes
+  register: package_install
+
+- name: Configure UFW Firewall
+  community.general.ufw:
+    state: enabled
+    policy: deny
+  register: ufw_config
+
+- name: Configure UFW Rules
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop:
+    - { port: 22, proto: tcp, comment: "SSH access" }
+    - { port: 80, proto: tcp, comment: "HTTP" }
+    - { port: 443, proto: tcp, comment: "HTTPS" }
+    - { port: 51820, proto: udp, comment: "WireGuard VPN" }
+    - { port: 9100, proto: tcp, comment: "Prometheus Node Exporter" }
+    - { port: 9090, proto: tcp, comment: "Prometheus" }
+    - { port: 3000, proto: tcp, comment: "Grafana" }
+  register: ufw_rules
+
+- name: Setup WireGuard VPN
+  community.general.wireguard:
+    state: present
+    interface: wg0
+    address: "{{ hostvars[inventory_hostname].network_config.vpc_config.subnets.management }}"
+    listen_port: 51820
+    private_key: "{{ wireguard_private_key }}"
+    peers: "{{ wireguard_peers }}"
+  register: vpn_setup
+
+- name: Configure Network Isolation
+  community.general.openvswitch_bridge:
+    bridge: br0
+    state: present
+    fail_mode: secure
+    vlan_mode: trunk
+  register: network_isolation
+
+- name: Configure Network Segments
+  community.general.openvswitch_port:
+    bridge: br0
+    port: "{{ item.name }}"
+    vlan: "{{ item.vlan }}"
+    state: present
+  loop:
+    - { name: "gpu_network", vlan: 100 }
+    - { name: "carbon_capture", vlan: 200 }
+    - { name: "management", vlan: 300 }
+  register: network_segments
+
+- name: Setup QoS Policies
+  ansible.builtin.template:
+    src: templates/qos-policies.j2
+    dest: /etc/network/qos-policies.conf
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    qos_policies:
+      gpu_traffic:
+        bandwidth: "10Gbps"
+        priority: "high"
+        burst: "12Gbps"
+        latency: "5ms"
+      carbon_capture:
+        bandwidth: "2Gbps"
+        priority: "medium"
+        burst: "3Gbps"
+        latency: "10ms"
+      monitoring:
+        bandwidth: "1Gbps"
+        priority: "medium"
+        burst: "1.5Gbps"
+        latency: "15ms"
+  register: qos_config
+
+- name: Apply QoS Policies
+  ansible.builtin.command:
+    cmd: tc qdisc add dev {{ item }} root htb default 30
+  loop: "{{ ansible_interfaces | difference(['lo']) }}"
+  register: qos_apply
+  ignore_errors: yes
+
+- name: Configure Network Monitoring
+  ansible.builtin.template:
+    src: templates/network-monitoring.j2
+    dest: /etc/prometheus/network-metrics.yml
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    metrics:
+      network_performance:
+        - bandwidth_utilization
+        - latency
+        - packet_loss
+        - connection_states
+        - error_rates
+      gpu_metrics:
+        - data_transfer_rate
+        - network_congestion
+        - queue_depth
+      environmental_metrics:
+        - cooling_system_network_traffic
+        - carbon_capture_data_flow
+        - environmental_sensor_data
+        - power_usage_metrics
+      alert_rules:
+        latency_threshold: "5ms"
+        bandwidth_threshold: "90%"
+        error_rate_threshold: "0.1%"
+        security_event_threshold: "critical"
+  register: monitoring_config
+
+- name: Configure Fail2ban
+  ansible.builtin.template:
+    src: templates/fail2ban.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart fail2ban
+  register: fail2ban_config
+
+- name: Enable and Start Services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  loop:
+    - ufw
+    - fail2ban
+    - prometheus-node-exporter
+    - openvswitch-switch
+  register: services_status
+
+- name: Set Network Configuration Status
+  ansible.builtin.set_fact:
+    network_config:
+      firewall_status: "{{ ufw_config.changed }}"
+      vpn_status: "{{ vpn_setup.changed }}"
+      isolation_status: "{{ network_isolation.changed }}"
+      qos_status: "{{ qos_config.changed }}"
+      environmental_metrics:
+        cooling_system: "{{ monitoring_config.changed }}"
+        carbon_capture: "{{ monitoring_config.changed }}"
+        power_usage: "{{ monitoring_config.changed }}"
+
+handlers:
+  - name: restart fail2ban
+    ansible.builtin.systemd:
+      name: fail2ban
+      state: restarted
+
+  - name: restart network
+    ansible.builtin.systemd:
+      name: networking
+      state: restarted
+
+  - name: restart prometheus-node-exporter
+    ansible.builtin.systemd:
+      name: prometheus-node-exporter
+      state: restarted
