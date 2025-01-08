@@ -1,0 +1,122 @@
+# Kubernetes version: 1.27+
+# Purpose: Define namespaces and associated resources for the Provocative Cloud platform
+
+---
+# Main application namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: provocative-cloud
+  labels:
+    name: provocative-cloud
+    environment: production
+    app.kubernetes.io/name: provocative-cloud
+    app.kubernetes.io/part-of: provocative-cloud-platform
+    app.kubernetes.io/component: core
+    app.kubernetes.io/version: 1.0.0
+    security.provocative.cloud/level: restricted
+  annotations:
+    description: "Main namespace for Provocative Cloud platform services"
+    security.provocative.cloud/compliance: "pci-dss,gdpr"
+    monitoring.provocative.cloud/priority: "high"
+
+---
+# Monitoring namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    environment: production
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/part-of: provocative-cloud-platform
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/version: 1.0.0
+    security.provocative.cloud/level: restricted
+  annotations:
+    description: "Namespace for monitoring and observability services"
+    security.provocative.cloud/compliance: "soc2"
+    monitoring.provocative.cloud/priority: "critical"
+
+---
+# Resource quota for provocative-cloud namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: provocative-cloud-quota
+  namespace: provocative-cloud
+spec:
+  hard:
+    requests.cpu: "16"
+    requests.memory: "32Gi"
+    limits.cpu: "32"
+    limits.memory: "64Gi"
+    pods: "50"
+    services: "20"
+    secrets: "100"
+    configmaps: "50"
+    persistentvolumeclaims: "20"
+    services.nodeports: "5"
+    services.loadbalancers: "2"
+
+---
+# Resource quota for monitoring namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: monitoring-quota
+  namespace: monitoring
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    pods: "20"
+    services: "10"
+    secrets: "50"
+    configmaps: "30"
+    persistentvolumeclaims: "10"
+    services.nodeports: "2"
+    services.loadbalancers: "1"
+
+---
+# Default deny network policy for provocative-cloud namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: provocative-cloud
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+
+---
+# Allow monitoring network policy for provocative-cloud namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: provocative-cloud
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+        - port: 9091
+          protocol: TCP
