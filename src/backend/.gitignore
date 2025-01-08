@@ -1,0 +1,109 @@
+# Environment files
+.env
+.env.local
+.env.*
+!.env.example
+.env.production
+.env.staging
+.env.test
+.env.development
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest-results/
+.ruff_cache/
+poetry.lock
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
+
+# MyPy artifacts
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+monitoring/*.log
+metrics/*.csv
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Security files
+*.pem
+*.key
+*.crt
+.secrets/
+*.cert
+*.p12
+*.pfx
+
+# Temporary files
+tmp/
+.temp/
+*.bak
+*.tmp
+*.swp
+
+# Documentation artifacts
+docs/_build/
+.pdoc/
+site/
+
+# GPU specific
+*.cuda-profile
+*.nvvp
+.nv/
+*.cubin
+*.fatbin
+
+# Monitoring artifacts
+.prometheus/
+grafana-data/
+*.pprof
+monitoring/data/
+
+# Container artifacts
+.docker/
+*.tar
+.containerignore
+docker-compose.override.yml
