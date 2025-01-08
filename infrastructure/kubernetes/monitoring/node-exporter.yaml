@@ -1,0 +1,136 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    app: node-exporter
+    component: monitoring
+    version: v1.6.1
+    part-of: provocative-cloud
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9100'
+    description: 'Node Exporter for system and environmental metrics'
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+        version: v1.6.1
+    spec:
+      hostNetwork: true
+      hostPID: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534  # nobody user
+        fsGroup: 65534
+      containers:
+      - name: node-exporter
+        image: prom/node-exporter:v1.6.1  # v1.6.1
+        args:
+        - --path.procfs=/host/proc
+        - --path.sysfs=/host/sys
+        - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+        - --collector.systemd
+        - --collector.processes
+        - --collector.cpu
+        - --collector.meminfo
+        - --collector.netdev
+        - --collector.diskstats
+        - --collector.thermal_zone
+        - --collector.powersupply
+        - --collector.carbon_capture
+        - --collector.cooling_efficiency
+        - --web.listen-address=:9100
+        - --web.telemetry-path=/metrics
+        ports:
+        - containerPort: 9100
+          protocol: TCP
+          name: metrics
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 150m
+            memory: 180Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: carbon-capture
+          mountPath: /host/carbon
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9100
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9100
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: carbon-capture
+        hostPath:
+          path: /var/lib/carbon
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    app: node-exporter
+    component: monitoring
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port: '9100'
+spec:
+  ports:
+  - port: 9100
+    targetPort: 9100
+    protocol: TCP
+    name: metrics
+  selector:
+    app: node-exporter
+  type: ClusterIP
