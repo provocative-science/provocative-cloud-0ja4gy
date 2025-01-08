@@ -1,0 +1,146 @@
+---
+- name: Deploy and Configure Monitoring Stack
+  hosts: monitoring_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    monitoring_user: "{{ monitoring_user }}"
+    data_dir: "{{ data_dir }}"
+    prometheus_version: "{{ prometheus_version }}"
+    grafana_version: "{{ grafana_version }}"
+    alertmanager_version: "{{ alertmanager_version }}"
+    nvidia_dcgm_exporter_version: "{{ nvidia_dcgm_exporter_version }}"
+    carbon_metrics_exporter_version: "{{ carbon_metrics_exporter_version }}"
+    metrics_retention_days: "{{ metrics_retention_days }}"
+
+  pre_tasks:
+    - name: Validate GPU driver compatibility
+      ansible.builtin.command: nvidia-smi
+      register: nvidia_smi_check
+      changed_when: false
+      failed_when: nvidia_smi_check.rc != 0
+
+    - name: Verify carbon capture system connectivity
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[inventory_hostname].carbon_capture_host }}"
+        port: "{{ hostvars[inventory_hostname].carbon_capture_port }}"
+        timeout: 10
+
+    - name: Create monitoring system user
+      ansible.builtin.user:
+        name: "{{ monitoring_user }}"
+        system: true
+        shell: /sbin/nologin
+        create_home: false
+
+    - name: Create required directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ monitoring_user }}"
+        group: "{{ monitoring_user }}"
+        mode: '0750'
+      loop:
+        - "{{ data_dir }}"
+        - "{{ data_dir }}/prometheus"
+        - "{{ data_dir }}/grafana"
+        - "{{ data_dir }}/alertmanager"
+        - "{{ data_dir }}/environmental"
+
+    - name: Install system dependencies
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - software-properties-common
+          - nvidia-container-toolkit
+          - python3-pip
+        state: present
+        update_cache: true
+
+  roles:
+    - role: monitoring
+      vars:
+        prometheus_version: "{{ prometheus_version }}"
+        grafana_version: "{{ grafana_version }}"
+        alertmanager_version: "{{ alertmanager_version }}"
+        nvidia_dcgm_exporter_version: "{{ nvidia_dcgm_exporter_version }}"
+        carbon_metrics_exporter_version: "{{ carbon_metrics_exporter_version }}"
+        monitoring_user: "{{ monitoring_user }}"
+        data_dir: "{{ data_dir }}"
+        metrics_retention_days: "{{ metrics_retention_days }}"
+
+  post_tasks:
+    - name: Verify Prometheus service
+      ansible.builtin.uri:
+        url: "http://localhost:9090/-/healthy"
+        method: GET
+        status_code: 200
+      register: prometheus_health
+      retries: 3
+      delay: 10
+      until: prometheus_health is success
+
+    - name: Verify Grafana service
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/health"
+        method: GET
+        status_code: 200
+      register: grafana_health
+      retries: 3
+      delay: 10
+      until: grafana_health is success
+
+    - name: Verify GPU metrics collection
+      ansible.builtin.uri:
+        url: "http://localhost:9400/metrics"
+        method: GET
+        status_code: 200
+      register: gpu_metrics
+      retries: 3
+      delay: 10
+      until: gpu_metrics is success
+
+    - name: Verify carbon capture metrics
+      ansible.builtin.uri:
+        url: "http://localhost:9501/metrics"
+        method: GET
+        status_code: 200
+      register: carbon_metrics
+      retries: 3
+      delay: 10
+      until: carbon_metrics is success
+
+  handlers:
+    - name: restart prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        state: restarted
+        daemon_reload: true
+
+    - name: restart grafana
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: restarted
+        daemon_reload: true
+
+    - name: restart alertmanager
+      ansible.builtin.systemd:
+        name: alertmanager
+        state: restarted
+        daemon_reload: true
+
+    - name: restart exporters
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+        daemon_reload: true
+      loop:
+        - dcgm-exporter
+        - carbon-capture-exporter
+
+  vars_files:
+    - ../vars/monitoring.yml
+
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
