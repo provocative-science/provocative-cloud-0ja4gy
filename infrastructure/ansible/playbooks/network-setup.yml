@@ -1,0 +1,221 @@
+---
+# Ansible playbook for network infrastructure setup and security configuration
+# Version: 2.15+ (ansible.builtin)
+# Version: 1.5+ (ansible.posix)
+# Version: 7.0+ (community.general)
+
+- name: Network Infrastructure Setup
+  hosts: network_infrastructure
+  become: true
+  gather_facts: true
+
+  vars:
+    network_packages:
+      - ufw
+      - fail2ban
+      - wireguard
+      - openvswitch-switch
+      - iptables
+      - net-tools
+      - tcpdump
+      - snmpd
+      - collectd
+    
+    firewall_ports:
+      - { port: 22, proto: tcp, comment: "SSH access" }
+      - { port: 80, proto: tcp, comment: "HTTP" }
+      - { port: 443, proto: tcp, comment: "HTTPS" }
+      - { port: 51820, proto: udp, comment: "WireGuard VPN" }
+      - { port: 9100, proto: tcp, comment: "Prometheus Node Exporter" }
+      - { port: 9090, proto: tcp, comment: "Prometheus" }
+      - { port: 3000, proto: tcp, comment: "Grafana" }
+    
+    vlan_configuration:
+      gpu_network:
+        id: 100
+        subnet: "10.100.0.0/24"
+      carbon_capture:
+        id: 200
+        subnet: "10.200.0.0/24"
+      management:
+        id: 300
+        subnet: "10.300.0.0/24"
+    
+    qos_policies:
+      gpu_traffic:
+        bandwidth: "10Gbps"
+        priority: "high"
+        burst: "12Gbps"
+      carbon_capture_traffic:
+        bandwidth: "2Gbps"
+        priority: "high"
+        burst: "3Gbps"
+      monitoring_traffic:
+        bandwidth: "1Gbps"
+        priority: "medium"
+        burst: "1.5Gbps"
+      management_traffic:
+        bandwidth: "1Gbps"
+        priority: "low"
+        burst: "1.2Gbps"
+
+  pre_tasks:
+    - name: Verify network connectivity
+      ansible.builtin.wait_for_connection:
+        timeout: 30
+
+    - name: Check required packages
+      ansible.builtin.package_facts:
+        manager: auto
+      register: pkg_facts
+
+    - name: Validate VLAN support
+      ansible.builtin.command: lsmod | grep 8021q
+      register: vlan_support
+      changed_when: false
+      ignore_errors: true
+
+    - name: Check environmental monitoring prerequisites
+      ansible.builtin.stat:
+        path: /usr/bin/collectd
+      register: collectd_check
+
+  tasks:
+    - name: Install required network packages
+      ansible.builtin.apt:
+        name: "{{ network_packages }}"
+        state: present
+        update_cache: yes
+      register: package_install
+
+    - name: Configure firewall rules
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        comment: "{{ item.comment }}"
+      loop: "{{ firewall_ports }}"
+      register: firewall_config
+
+    - name: Setup VPN access
+      community.general.wireguard:
+        state: present
+        interface: wg0
+        address: "{{ hostvars[inventory_hostname].network_config.vpc_config.subnets.management }}"
+        listen_port: 51820
+        private_key: "{{ wireguard_private_key }}"
+        peers: "{{ wireguard_peers }}"
+      register: vpn_setup
+
+    - name: Configure VLAN segmentation
+      community.general.openvswitch_bridge:
+        bridge: br0
+        state: present
+        fail_mode: secure
+        vlan_mode: trunk
+      register: vlan_config
+
+    - name: Setup network isolation
+      community.general.openvswitch_port:
+        bridge: br0
+        port: "{{ item.key }}"
+        vlan: "{{ item.value.id }}"
+        state: present
+      loop: "{{ vlan_configuration | dict2items }}"
+      register: network_isolation
+
+    - name: Configure QoS policies
+      ansible.builtin.template:
+        src: templates/qos-policies.j2
+        dest: /etc/network/qos-policies.conf
+        owner: root
+        group: root
+        mode: '0644'
+      vars:
+        qos_config: "{{ qos_policies }}"
+      register: qos_setup
+
+    - name: Setup network monitoring
+      ansible.builtin.template:
+        src: templates/network-monitoring.j2
+        dest: /etc/prometheus/network-metrics.yml
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart prometheus
+      register: monitoring_setup
+
+    - name: Configure environmental metrics collection
+      ansible.builtin.template:
+        src: templates/environmental-metrics.j2
+        dest: /etc/prometheus/environmental-metrics.yml
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart prometheus
+      register: environmental_setup
+
+    - name: Enable and verify services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - ufw
+        - fail2ban
+        - openvswitch-switch
+        - prometheus-node-exporter
+        - collectd
+      register: services_status
+
+  post_tasks:
+    - name: Verify network configuration
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - ovs-vsctl show
+        - ufw status verbose
+        - wg show
+      register: network_verification
+      changed_when: false
+
+    - name: Test connectivity
+      ansible.builtin.wait_for:
+        host: "{{ item.value.subnet | ipaddr('network') }}"
+        port: 22
+        timeout: 10
+      loop: "{{ vlan_configuration | dict2items }}"
+      register: connectivity_test
+
+    - name: Verify environmental monitoring
+      ansible.builtin.uri:
+        url: "http://localhost:9090/metrics"
+        return_content: yes
+      register: metrics_verification
+      failed_when: "'carbon_capture' not in metrics_verification.content"
+
+  handlers:
+    - name: restart network services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - networking
+        - openvswitch-switch
+        - wireguard@wg0
+
+    - name: reload firewall
+      ansible.builtin.systemd:
+        name: ufw
+        state: reloaded
+
+    - name: restart monitoring
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: restarted
+
+    - name: restart environmental services
+      ansible.builtin.systemd:
+        name: collectd
+        state: restarted
