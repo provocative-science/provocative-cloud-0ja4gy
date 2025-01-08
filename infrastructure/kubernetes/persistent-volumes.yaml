@@ -1,0 +1,124 @@
+# Kubernetes version: 1.27+
+# PersistentVolume definitions for Provocative Cloud platform
+# Implements high-performance storage volumes with encryption and monitoring
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gpu-data-pv
+  namespace: provocative-cloud
+  labels:
+    type: gpu-data
+    app: gpu-manager
+    tier: storage
+    encryption: enabled
+  annotations:
+    monitoring.provocative.cloud/scrape: "true"
+    monitoring.provocative.cloud/iops-threshold: "5000"
+    backup.provocative.cloud/retention: "30d"
+spec:
+  capacity:
+    storage: 1Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  storageClassName: gpu-storage
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - noatime
+    - nodiratime
+    - discard
+  csi:
+    driver: kubernetes.io/ceph
+    volumeHandle: gpu-data-volume
+    fsType: ext4
+    nodeStageSecretRef:
+      name: ceph-secret
+      namespace: provocative-cloud
+    controllerExpandSecretRef:
+      name: ceph-secret
+      namespace: provocative-cloud
+    volumeAttributes:
+      encryption: "true"
+      performanceMode: maxIO
+      replication: "3"
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: metrics-pv
+  namespace: provocative-cloud
+  labels:
+    type: metrics
+    app: monitoring
+    tier: storage
+    encryption: enabled
+  annotations:
+    monitoring.provocative.cloud/scrape: "true"
+    monitoring.provocative.cloud/iops-threshold: "3000"
+    backup.provocative.cloud/retention: "90d"
+spec:
+  capacity:
+    storage: 500Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - noatime
+    - nodiratime
+  csi:
+    driver: kubernetes.io/ceph
+    volumeHandle: metrics-volume
+    fsType: ext4
+    nodeStageSecretRef:
+      name: ceph-secret
+      namespace: provocative-cloud
+    volumeAttributes:
+      encryption: "true"
+      performanceMode: standard
+      replication: "2"
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: user-data-pv
+  namespace: provocative-cloud
+  labels:
+    type: user-data
+    app: backend-api
+    tier: storage
+    encryption: enabled
+  annotations:
+    monitoring.provocative.cloud/scrape: "true"
+    monitoring.provocative.cloud/iops-threshold: "4000"
+    backup.provocative.cloud/retention: "60d"
+spec:
+  capacity:
+    storage: 2Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - noatime
+    - nodiratime
+    - discard
+  csi:
+    driver: kubernetes.io/ceph
+    volumeHandle: user-data-volume
+    fsType: ext4
+    nodeStageSecretRef:
+      name: ceph-secret
+      namespace: provocative-cloud
+    controllerExpandSecretRef:
+      name: ceph-secret
+      namespace: provocative-cloud
+    volumeAttributes:
+      encryption: "true"
+      performanceMode: balanced
+      replication: "3"
