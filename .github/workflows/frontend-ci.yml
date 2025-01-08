@@ -1,0 +1,94 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['src/web/**']
+  pull_request:
+    branches: [main, develop]
+    paths: ['src/web/**']
+
+env:
+  NODE_VERSION: '18.x'
+  WORKING_DIRECTORY: 'src/web'
+  CACHE_DEPENDENCY_PATH: 'src/web/package-lock.json'
+  TEST_COVERAGE_THRESHOLD: '80'
+
+jobs:
+  validate:
+    name: Validate and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3 # v3.5.3
+        with:
+          fetch-depth: 1
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3 # v3.7.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ env.CACHE_DEPENDENCY_PATH }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v3 # v3.3.1
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('src/web/package-lock.json') }}
+          restore-keys: |
+            npm-
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm ci --audit
+        timeout-minutes: 5
+
+      - name: TypeScript type check
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run tsc -- --noEmit
+        timeout-minutes: 3
+
+      - name: Lint
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run lint
+        timeout-minutes: 3
+
+      - name: Test
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          npm run test -- --coverage --maxWorkers=2 --ci --watchAll=false
+          if [ $(jq -r '.coverageThreshold.global.branches' coverage/coverage-final.json) -lt $TEST_COVERAGE_THRESHOLD ]; then
+            echo "Test coverage below threshold of $TEST_COVERAGE_THRESHOLD%"
+            exit 1
+          fi
+        timeout-minutes: 5
+        env:
+          CI: true
+
+      - name: Build
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run build
+        timeout-minutes: 5
+        env:
+          CI: true
+          NODE_ENV: production
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: ${{ env.WORKING_DIRECTORY }}/coverage
+          retention-days: 14
+
+      - name: Upload build artifacts
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: ${{ env.WORKING_DIRECTORY }}/dist
+          retention-days: 1
