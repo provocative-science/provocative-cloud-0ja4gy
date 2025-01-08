@@ -1,0 +1,168 @@
+/* 
+ * Provocative Cloud Theme System
+ * Version: 1.0.0
+ * WCAG 2.1 Level AA Compliant
+ */
+
+@import './variables.css';
+
+/* Base Theme Styles */
+body {
+  background-color: var(--background-light);
+  color: var(--primary-text-light);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark Theme */
+body[data-theme='dark'] {
+  background-color: var(--background-dark);
+  color: var(--primary-text-dark);
+  color-scheme: dark;
+}
+
+/* High Contrast Theme */
+body[data-high-contrast='true'] {
+  color-scheme: high-contrast;
+  --contrast-ratio: 7:1;
+  --background-light: #FFFFFF;
+  --background-dark: #000000;
+  --primary-text-light: #000000;
+  --primary-text-dark: #FFFFFF;
+}
+
+/* Typography Utility Classes */
+.text-primary {
+  color: var(--primary-text-light);
+  font-weight: var(--font-weight-normal);
+}
+
+[data-theme='dark'] .text-primary {
+  color: var(--primary-text-dark);
+}
+
+.text-secondary {
+  color: var(--secondary-text-light);
+  font-weight: var(--font-weight-normal);
+}
+
+[data-theme='dark'] .text-secondary {
+  color: var(--secondary-text-dark);
+}
+
+.text-accent {
+  color: var(--accent-light);
+  font-weight: var(--font-weight-medium);
+}
+
+[data-theme='dark'] .text-accent {
+  color: var(--accent-dark);
+}
+
+/* Background Utility Classes */
+.bg-primary {
+  background-color: var(--background-light);
+  transition: background-color 0.3s ease;
+}
+
+[data-theme='dark'] .bg-primary {
+  background-color: var(--background-dark);
+}
+
+.bg-accent {
+  background-color: var(--accent-light);
+  transition: background-color 0.3s ease;
+}
+
+[data-theme='dark'] .bg-accent {
+  background-color: var(--accent-dark);
+}
+
+/* Spacing Utility Classes */
+.spacing-xs {
+  margin: var(--spacing-xs);
+  padding: var(--spacing-xs);
+}
+
+.spacing-sm {
+  margin: var(--spacing-sm);
+  padding: var(--spacing-sm);
+}
+
+.spacing-md {
+  margin: var(--spacing-md);
+  padding: var(--spacing-md);
+}
+
+.spacing-lg {
+  margin: var(--spacing-lg);
+  padding: var(--spacing-lg);
+}
+
+.spacing-xl {
+  margin: var(--spacing-xl);
+  padding: var(--spacing-xl);
+}
+
+/* Responsive Typography */
+@media (min-width: var(--breakpoint-mobile)) {
+  body {
+    font-size: calc(var(--font-size-base) * 0.875);
+    line-height: calc(var(--line-height-base) * 0.875);
+  }
+}
+
+@media (min-width: var(--breakpoint-tablet)) {
+  body {
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-base);
+  }
+}
+
+@media (min-width: var(--breakpoint-desktop)) {
+  body {
+    font-size: calc(var(--font-size-base) * 1.125);
+    line-height: calc(var(--line-height-base) * 1.125);
+  }
+}
+
+@media (min-width: var(--breakpoint-large)) {
+  body {
+    font-size: calc(var(--font-size-base) * 1.25);
+    line-height: calc(var(--line-height-base) * 1.25);
+  }
+}
+
+/* Focus Styles for Accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+[data-theme='dark'] :focus-visible {
+  outline-color: var(--accent-dark);
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background-color: white;
+    color: black;
+  }
+
+  @page {
+    margin: 2cm;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
