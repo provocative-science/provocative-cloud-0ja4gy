@@ -1,0 +1,150 @@
+---
+# Pre-installation checks and environment preparation
+- name: Verify system requirements
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= 8192  # Minimum 8GB RAM
+      - ansible_processor_vcpus >= 2  # Minimum 2 vCPUs
+    fail_msg: "System does not meet minimum requirements"
+
+- name: Create monitoring user
+  ansible.builtin.user:
+    name: "{{ monitoring_user }}"
+    system: yes
+    shell: /sbin/nologin
+    create_home: no
+
+- name: Create monitoring directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ monitoring_user }}"
+    group: "{{ monitoring_user }}"
+    mode: '0750'
+  loop:
+    - "{{ data_dir }}"
+    - "{{ data_dir }}/prometheus"
+    - "{{ data_dir }}/grafana"
+    - "{{ data_dir }}/alertmanager"
+
+# Install Prometheus
+- name: Download and extract Prometheus
+  ansible.builtin.unarchive:
+    src: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    dest: /tmp
+    remote_src: yes
+    creates: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64"
+
+- name: Copy Prometheus binary
+  ansible.builtin.copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/prometheus"
+    dest: /usr/local/bin/prometheus
+    mode: '0755'
+    remote_src: yes
+
+- name: Configure Prometheus
+  community.kubernetes.k8s:
+    state: present
+    definition: "{{ lookup('file', 'prometheus.yaml') | from_yaml }}"
+
+# Install Grafana
+- name: Add Grafana repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://packages.grafana.com/oss/deb stable main"
+    state: present
+    filename: grafana
+
+- name: Install Grafana
+  ansible.builtin.apt:
+    name: "grafana={{ grafana_version }}"
+    state: present
+    update_cache: yes
+
+- name: Configure Grafana
+  community.kubernetes.k8s:
+    state: present
+    definition: "{{ lookup('file', 'grafana.yaml') | from_yaml }}"
+
+# Install GPU Exporter
+- name: Download and install NVIDIA GPU exporter
+  ansible.builtin.get_url:
+    url: "https://github.com/NVIDIA/gpu-monitoring-tools/releases/download/v{{ gpu_exporter_version }}/dcgm-exporter-{{ gpu_exporter_version }}.tar.gz"
+    dest: /tmp/dcgm-exporter.tar.gz
+    mode: '0644'
+
+- name: Extract GPU exporter
+  ansible.builtin.unarchive:
+    src: /tmp/dcgm-exporter.tar.gz
+    dest: /usr/local/bin
+    remote_src: yes
+    creates: /usr/local/bin/dcgm-exporter
+
+# Install Carbon Capture Exporter
+- name: Install Carbon Capture metrics exporter
+  ansible.builtin.pip:
+    name: "carbon-capture-exporter=={{ carbon_exporter_version }}"
+    state: present
+
+# Configure systemd services
+- name: Setup Prometheus systemd service
+  ansible.builtin.template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    mode: '0644'
+  notify: restart prometheus
+
+- name: Setup Grafana systemd service
+  ansible.builtin.template:
+    src: grafana-server.service.j2
+    dest: /etc/systemd/system/grafana-server.service
+    mode: '0644'
+  notify: restart grafana
+
+# Configure monitoring stack
+- name: Configure Prometheus retention and scrape settings
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ data_dir }}/prometheus/prometheus.yml"
+    owner: "{{ monitoring_user }}"
+    group: "{{ monitoring_user }}"
+    mode: '0640'
+  vars:
+    retention_days: "{{ retention_days }}"
+    scrape_interval: "{{ scrape_interval }}"
+    evaluation_interval: "{{ evaluation_interval }}"
+  notify: reload prometheus
+
+- name: Configure environmental metrics collection
+  ansible.builtin.template:
+    src: environmental-metrics.yml.j2
+    dest: "{{ data_dir }}/prometheus/environmental-metrics.yml"
+    owner: "{{ monitoring_user }}"
+    group: "{{ monitoring_user }}"
+    mode: '0640'
+  notify: reload prometheus
+
+# Start and enable services
+- name: Start and enable monitoring services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  loop:
+    - prometheus
+    - grafana-server
+    - dcgm-exporter
+    - carbon-capture-exporter
+
+# Export monitoring status
+- name: Gather monitoring services status
+  ansible.builtin.service_facts:
+
+- name: Set monitoring status facts
+  ansible.builtin.set_fact:
+    monitoring_status:
+      prometheus_status: "{{ ansible_facts.services['prometheus.service'].state }}"
+      grafana_status: "{{ ansible_facts.services['grafana-server.service'].state }}"
+      alertmanager_status: "{{ ansible_facts.services['alertmanager.service'].state }}"
+      gpu_metrics_status: "{{ ansible_facts.services['dcgm-exporter.service'].state }}"
+      environmental_metrics_status: "{{ ansible_facts.services['carbon-capture-exporter.service'].state }}"
