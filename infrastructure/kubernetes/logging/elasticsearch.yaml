@@ -1,0 +1,217 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-config
+  namespace: provocative-cloud
+  labels:
+    app: elasticsearch
+    component: logging
+    security-tier: restricted
+data:
+  elasticsearch.yml: |
+    cluster.name: provocative-logging
+    network.host: 0.0.0.0
+    bootstrap.memory_lock: true
+    xpack.security.enabled: true
+    xpack.security.transport.ssl.enabled: true
+    xpack.security.transport.ssl.verification_mode: certificate
+    xpack.security.transport.ssl.keystore.path: /usr/share/elasticsearch/config/certs/elastic-certificates.p12
+    xpack.security.transport.ssl.truststore.path: /usr/share/elasticsearch/config/certs/elastic-certificates.p12
+    xpack.monitoring.collection.enabled: true
+    xpack.security.audit.enabled: true
+    xpack.security.audit.logfile.events.include: authentication_success,authentication_failure,access_denied,connection_denied
+    indices.lifecycle.policies.logs:
+      phases:
+        hot:
+          min_age: 0ms
+          actions:
+            rollover:
+              max_age: 1d
+              max_size: 50gb
+        warm:
+          min_age: 2d
+          actions:
+            shrink:
+              number_of_shards: 1
+        delete:
+          min_age: 90d
+          actions:
+            delete: {}
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  namespace: provocative-cloud
+  labels:
+    app: elasticsearch
+    component: logging
+    security-tier: restricted
+spec:
+  serviceName: elasticsearch
+  replicas: 3
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+        security-tier: restricted
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.35
+          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+        - name: increase-vm-max-map
+          image: busybox:1.35
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.0.0 # version: 8.0+
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          ports:
+            - containerPort: 9200
+              name: http
+            - containerPort: 9300
+              name: transport
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+            - name: elasticsearch-config
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              subPath: elasticsearch.yml
+            - name: tmp
+              mountPath: /tmp
+          env:
+            - name: cluster.name
+              value: provocative-logging
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: discovery.seed_hosts
+              value: "elasticsearch-0.elasticsearch,elasticsearch-1.elasticsearch,elasticsearch-2.elasticsearch"
+            - name: cluster.initial_master_nodes
+              value: "elasticsearch-0,elasticsearch-1,elasticsearch-2"
+            - name: ES_JAVA_OPTS
+              value: "-Xms2g -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+            - name: xpack.security.enabled
+              value: "true"
+            - name: xpack.security.transport.ssl.enabled
+              value: "true"
+            - name: xpack.monitoring.collection.enabled
+              value: "true"
+            - name: xpack.security.audit.enabled
+              value: "true"
+          resources:
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: transport
+            initialDelaySeconds: 60
+            periodSeconds: 20
+      volumes:
+        - name: elasticsearch-config
+          configMap:
+            name: elasticsearch-config
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 100Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: provocative-cloud
+  labels:
+    app: elasticsearch
+    component: logging
+    security-tier: restricted
+spec:
+  clusterIP: None
+  ports:
+    - port: 9200
+      name: http
+      protocol: TCP
+    - port: 9300
+      name: transport
+      protocol: TCP
+  selector:
+    app: elasticsearch
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: elasticsearch-network-policy
+  namespace: provocative-cloud
+spec:
+  podSelector:
+    matchLabels:
+      app: elasticsearch
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: logging
+      ports:
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 9300
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: elasticsearch
+      ports:
+        - protocol: TCP
+          port: 9300
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+          endPort: 53
