@@ -1,16 +1,62 @@
 # SQLAlchemy v2.0.0+
-from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, UUID, Index
+from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, UUID, Index, func, event, DDL
 # SQLAlchemy ORM v2.0.0+
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 # SQLAlchemy Utils v0.41.0+
-from sqlalchemy_utils import TimestampMixin, ValidationMixin
+#from sqlalchemy_utils import TimestampMixin, ValidationMixin
 # SQLAlchemy TimescaleDB v0.5.0+
-from sqlalchemy_timescaledb import TimescaleDBMixin
+#from sqlalchemy_timescaledb import TimescaleDBMixin
 from datetime import datetime
 import uuid
 from typing import Dict, Optional
 
 from db.base import Base
+
+class ValidationMixin:
+    """
+    A mixin that provides field validation using SQLAlchemy's `@validates` decorator.
+    """
+
+    @validates('metric_name')
+    def validate_metric_name(self, key, value):
+        """Ensure metric_name is a non-empty string."""
+        if not value or not isinstance(value, str):
+            raise ValueError(f"{key} must be a non-empty string")
+        return value
+
+    @validates('value')
+    def validate_value(self, key, value):
+        """Ensure value is a positive number."""
+        if value <= 0:
+            raise ValueError(f"{key} must be a positive number")
+        return value
+
+class TimescaleDBMixin:
+    """
+    A mixin for TimescaleDB hypertables.
+    Automatically converts a table into a TimescaleDB hypertable upon creation.
+    """
+
+    @classmethod
+    def __declare_last__(cls):
+        """
+        SQLAlchemy event hook that runs after table creation to convert it to a TimescaleDB hypertable.
+        """
+        # Assuming the primary key column is 'time' (adjust if needed)
+        event.listen(
+            cls.__table__,
+            'after_create',
+            DDL(f"SELECT create_hypertable('{cls.__table__.name}', 'time', if_not_exists => TRUE)")
+        )
+
+class TimestampMixin:
+    """
+    A mixin that adds `created_at` and `updated_at` columns to a model,
+    with automatic timestamp handling.
+    """
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
 
 class GPUMetrics(Base, TimescaleDBMixin, ValidationMixin):
     """

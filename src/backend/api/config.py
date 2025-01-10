@@ -9,7 +9,8 @@ import ssl
 import logging
 from urllib.parse import urlparse
 
-from pydantic import BaseSettings, Field, SecretStr, validator
+from pydantic import Field, SecretStr, validator
+from pydantic_settings import BaseSettings
 from api.constants import (
     API_VERSION, API_PREFIX, PROJECT_NAME, JWT_ALGORITHM,
     JWT_TOKEN_EXPIRE_MINUTES, OAUTH_SCOPES, RATE_LIMIT_USER,
@@ -92,7 +93,12 @@ class Settings(BaseSettings):
         """
         db_url = urlparse(self.DATABASE_URL.get_secret_value())
         
+        # Handle port being None by omitting it if not provided
+        port = f":{db_url.port}" if db_url.port else ""
+        connection_url = f"{db_url.scheme}://{db_url.username}:{db_url.password}@{db_url.hostname}{port}{db_url.path}"
+
         settings = {
+            "url": connection_url,
             "pool_size": self.DATABASE_POOL_SIZE,
             "max_overflow": self.DATABASE_MAX_OVERFLOW,
             "pool_timeout": 30,
@@ -108,8 +114,10 @@ class Settings(BaseSettings):
 
         if self.DATABASE_REPLICA_URL:
             replica_url = urlparse(self.DATABASE_REPLICA_URL.get_secret_value())
+            replica_port = f":{replica_url.port}" if replica_url.port else ""
+            replica_connection_url = f"{replica_url.scheme}://{replica_url.username}:{replica_url.password}@{replica_url.hostname}{replica_port}{replica_url.path}"
             settings["read_replica"] = {
-                "url": str(replica_url),
+                "url": replica_connection_url,
                 "pool_size": self.DATABASE_POOL_SIZE // 2
             }
 

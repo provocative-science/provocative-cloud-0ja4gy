@@ -14,7 +14,8 @@ from datetime import datetime
 
 import json_logging  # version: 2.0.7
 import structlog    # version: 23.1.0
-from elasticsearch_logger import ElasticsearchLogger  # version: 1.2.0
+#from elasticsearch_logger import ElasticsearchLogger  # version: 1.2.0
+from elasticsearch import Elasticsearch
 import sentry_sdk  # version: 1.28.1
 
 from api.config import settings
@@ -43,6 +44,23 @@ SENSITIVE_PATTERNS = [
     "password", "token", "secret", "key", "credential",
     "auth", "jwt", "session", "cookie"
 ]
+
+
+class ElasticsearchHandler(logging.Handler):
+    def __init__(self, hosts, api_key, index_name, ssl_verify=True, use_ssl=True):
+        super().__init__()
+        self.es = Elasticsearch(
+            hosts,
+            api_key=api_key,
+            verify_certs=ssl_verify,
+            scheme="https" if use_ssl else "http"
+        )
+        self.index_name = index_name
+
+    def emit(self, record):
+        log_entry = self.format(record)
+        self.es.index(index=self.index_name, body={"message": log_entry})
+
 
 class RequestIdFilter(logging.Filter):
     """Thread-safe logging filter that adds request ID to all log records."""
@@ -128,6 +146,18 @@ def sanitize_log_data(log_data: Dict) -> Dict:
         return [sanitize_log_data(item) for item in log_data]
     return log_data
 
+def get_request_logger(request_id):
+    logger = logging.getLogger(f"request-{request_id}")
+    logger.setLevel(logging.INFO)
+    return logger
+
+def log_request(request):
+    print(f"Logging request: {request}")
+
+def log_error(error):
+    logger = logging.getLogger("StructuredLogger")
+    logger.error(f"Error: {error}")
+
 def setup_logging(
     log_level: str = "INFO",
     elk_host: str = "localhost",
@@ -162,15 +192,25 @@ def setup_logging(
 
     # Configure ELK Stack integration
     if settings.ENVIRONMENT == "production":
-        elk_handler = ElasticsearchLogger(
+        elk_handler = ElasticsearchHandler(
             hosts=[f"https://{elk_host}:{elk_port}"],
-            auth_type="api_key",
             api_key=settings.ELK_API_KEY.get_secret_value(),
             index_name=f"{PROJECT_NAME.lower()}-logs",
             ssl_verify=True,
             use_ssl=True
         )
         logger.addHandler(elk_handler)
+
+#    if settings.ENVIRONMENT == "production":
+#        elk_handler = ElasticsearchLogger(
+#            hosts=[f"https://{elk_host}:{elk_port}"],
+#            auth_type="api_key",
+#            api_key=settings.ELK_API_KEY.get_secret_value(),
+#            index_name=f"{PROJECT_NAME.lower()}-logs",
+#            ssl_verify=True,
+#            use_ssl=True
+#        )
+#        logger.addHandler(elk_handler)
 
     # Configure Sentry integration
     if sentry_dsn:

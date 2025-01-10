@@ -43,7 +43,8 @@ class PaymentBase(BaseModel):
 
 class PaymentCreate(PaymentBase):
     """Pydantic model for creating new payments with Stripe integration."""
-    stripe_payment_id: str = Field(..., max_length=255, regex='^pi_[a-zA-Z0-9]{24}$')
+    stripe_payment_id: str = Field(..., max_length=255, pattern='^pi_[a-zA-Z0-9]{24}$')
+
     status: str = Field(default='pending')
 
     @validator('status')

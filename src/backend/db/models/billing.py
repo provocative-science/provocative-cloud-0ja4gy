@@ -185,3 +185,108 @@ class Invoice(Base):
 
         # Return signed PDF content (implementation details handled by PDF generation service)
         return bytes()
+
+class Payment(Base):
+    """
+    SQLAlchemy model representing a payment record associated with a transaction.
+    Handles payment status tracking and refund processing.
+    """
+    __tablename__ = 'payments'
+
+    id = Column(UUID, primary_key=True, default=uuid4, nullable=False)
+    transaction_id = Column(UUID, ForeignKey('transactions.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(UUID, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    
+    # Payment details
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(3), nullable=False)
+    method = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False)
+    payment_metadata = Column(JSON, nullable=True, default=dict)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    user = relationship("User", backref="payments", lazy="joined")
+    transaction = relationship("Transaction", backref="payments", lazy="joined")
+
+    @validates('currency')
+    def validate_currency(self, key: str, value: str) -> str:
+        """Validate currency code against ISO 4217 standards."""
+        if value not in CURRENCY_CODES:
+            raise ValueError(f"Invalid currency code: {value}")
+        return value
+
+    def to_dict(self) -> Dict:
+        """Convert payment model to dictionary."""
+        return {
+            'id': str(self.id),
+            'transaction_id': str(self.transaction_id),
+            'user_id': str(self.user_id),
+            'amount': str(self.amount),
+            'currency': self.currency,
+            'method': self.method,
+            'status': self.status,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+            'payment_metadata': self.payment_metadata
+        }
+
+class GPUPricing(Base):
+    """
+    SQLAlchemy model representing the pricing details for GPU usage.
+    Handles dynamic pricing updates and versioning for billing purposes.
+    """
+    __tablename__ = 'gpu_pricing'
+
+    id = Column(UUID, primary_key=True, default=uuid4, nullable=False)
+    gpu_type = Column(String(50), nullable=False, unique=True)
+    price_per_hour = Column(Numeric(10, 4), nullable=False)
+    currency = Column(String(3), nullable=False)
+
+    # Versioning and audit trail
+    effective_from = Column(DateTime(timezone=True), nullable=False)
+    effective_to = Column(DateTime(timezone=True), nullable=True)
+    audit_trail = Column(JSON, nullable=False, default=list)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(currency.in_(CURRENCY_CODES), name='valid_currency'),
+        CheckConstraint(price_per_hour > 0, name='positive_price'),
+    )
+
+    def to_dict(self) -> Dict:
+        """Convert GPU pricing model to dictionary."""
+        return {
+            'id': str(self.id),
+            'gpu_type': self.gpu_type,
+            'price_per_hour': str(self.price_per_hour),
+            'currency': self.currency,
+            'effective_from': self.effective_from.isoformat(),
+            'effective_to': self.effective_to.isoformat() if self.effective_to else None,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
+    def update_price(self, new_price: Decimal, effective_to: Optional[datetime] = None):
+        """Update GPU price with audit trail."""
+        if new_price <= 0:
+            raise ValueError("Price must be greater than zero.")
+
+        # Update audit trail
+        self.audit_trail.append({
+            'action': 'price_updated',
+            'previous_price': str(self.price_per_hour),
+            'new_price': str(new_price),
+            'timestamp': datetime.utcnow().isoformat()
+        })
+
+        self.price_per_hour = new_price
+        self.effective_to = effective_to or None
+        self.updated_at = datetime.utcnow()
+
