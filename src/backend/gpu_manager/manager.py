@@ -10,10 +10,11 @@ from typing import Dict, List, Optional
 import time
 
 import numpy as np  # version: 1.24.0
-from pydantic import BaseModel  # version: 2.0+
+#from pydantic import BaseModel  # version: 2.0+
+from pydantic_settings import BaseSettings
 from prometheus_client import Counter, Gauge  # version: 0.17.0
 
-from gpu_manager.config import gpu_settings, get_gpu_settings, get_monitoring_settings, get_environmental_settings
+from gpu_manager.config import gpu_settings
 from gpu_manager.nvidia import NvidiaGPU, initialize_nvml, shutdown_nvml
 from gpu_manager.metrics import GPUMetricsCollector
 
@@ -76,9 +77,9 @@ class GPUManager:
                 raise RuntimeError("Failed to initialize NVIDIA management library")
 
             # Load configuration settings
-            gpu_config = get_gpu_settings()
-            env_config = get_environmental_settings()
-            monitoring_config = get_monitoring_settings()
+            gpu_config = gpu_settings.get_gpu_settings()
+            env_config = gpu_settings.get_environmental_settings()
+            monitoring_config = gpu_settings.get_monitoring_settings()
 
             # Initialize GPU devices
             device_count = len(self._gpu_devices)

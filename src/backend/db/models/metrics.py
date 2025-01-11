@@ -64,7 +64,7 @@ class GPUMetrics(Base, TimescaleDBMixin, ValidationMixin):
     Tracks temperature, power usage, memory utilization, and performance metrics.
     """
     __tablename__ = 'gpu_metrics'
-    
+
     id = Column(UUID, primary_key=True, default=uuid.uuid4)
     gpu_id = Column(UUID, ForeignKey('gpus.id'), nullable=False)
     temperature_celsius = Column(Float, nullable=False)
@@ -102,16 +102,16 @@ class GPUMetrics(Base, TimescaleDBMixin, ValidationMixin):
         """Validate GPU metrics against defined thresholds."""
         if not 0 <= self.temperature_celsius <= 120:
             raise ValueError("Temperature must be between 0-120°C")
-        
+
         if not 0 <= self.power_usage_watts <= 1000:
             raise ValueError("Power usage must be between 0-1000 watts")
-            
+
         if not 0 <= self.memory_used_gb <= self.memory_total_gb:
             raise ValueError("Memory used cannot exceed total memory")
-            
+
         if not 0 <= self.utilization_percent <= 100:
             raise ValueError("Utilization must be between 0-100%")
-        
+
         return True
 
     def detect_anomalies(self) -> bool:
@@ -133,7 +133,7 @@ class CarbonMetrics(Base, TimescaleDBMixin, ValidationMixin):
     Tracks CO2 capture rates and efficiency metrics.
     """
     __tablename__ = 'carbon_metrics'
-    
+
     id = Column(UUID, primary_key=True, default=uuid.uuid4)
     co2_captured_kg = Column(Float, nullable=False)
     power_usage_effectiveness = Column(Float, nullable=False)
@@ -167,7 +167,7 @@ class CarbonMetrics(Base, TimescaleDBMixin, ValidationMixin):
         """Check if current metrics meet efficiency targets."""
         if not self.efficiency_targets:
             return 1
-        
+
         targets = eval(self.efficiency_targets)
         return 1 if all([
             self.power_usage_effectiveness <= targets.get('max_pue', 1.5),
@@ -181,9 +181,10 @@ class SystemMetrics(Base, TimescaleDBMixin, ValidationMixin):
     Tracks server performance and resource utilization.
     """
     __tablename__ = 'system_metrics'
-    
+
     id = Column(UUID, primary_key=True, default=uuid.uuid4)
-    server_id = Column(String, nullable=False)
+    server_id = Column(UUID(as_uuid=True), ForeignKey("server.id"), nullable=False)
+    server = relationship("Server", back_populates="metrics")
     cpu_usage_percent = Column(Float, nullable=False)
     memory_usage_percent = Column(Float, nullable=False)
     network_bandwidth_mbps = Column(Float, nullable=False)
@@ -223,7 +224,7 @@ class SystemMetrics(Base, TimescaleDBMixin, ValidationMixin):
         """Check if system metrics indicate attention is required."""
         if not self.system_thresholds:
             return 0
-            
+
         thresholds = eval(self.system_thresholds)
         return 1 if any([
             self.cpu_usage_percent > thresholds.get('max_cpu', 90),

@@ -5,7 +5,9 @@ and environmental impact tracking parameters.
 """
 
 from typing import Dict, List, Optional
-from pydantic import BaseSettings, Field
+#from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 from api.config import settings
 
@@ -97,6 +99,7 @@ class GPUManagerSettings(BaseSettings):
         case_sensitive = True
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
     def get_gpu_settings(self) -> Dict:
         """

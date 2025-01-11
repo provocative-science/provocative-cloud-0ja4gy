@@ -85,15 +85,17 @@ class Reservation(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relationships
-    user = relationship("User", backref="reservations", lazy="joined")
-    gpu = relationship("GPU", backref="reservations", lazy="joined")
+    #user = relationship("User", backref="reservations", lazy="joined")
+    #gpu = relationship("GPU", backref="reservations", lazy="joined")
+    user = relationship("User", lazy="joined")
+    gpu = relationship("GPU", lazy="joined")
 
     def __init__(self, user_id: UUID, gpu_id: UUID, start_time: datetime,
                  end_time: datetime, auto_renew: bool, deployment_config: Dict,
                  billing_config: Optional[Dict] = None) -> None:
         """Initialize a new reservation with comprehensive validation."""
         super().__init__()
-        
+
         # Validate rental period
         rental_duration = end_time - start_time
         if rental_duration > MAX_RENTAL_DURATION:
@@ -115,7 +117,7 @@ class Reservation(Base):
         self.auto_renew = auto_renew
         self.deployment_config = deployment_config
         self.billing_config = billing_config or {}
-        
+
         # Initialize status tracking
         self.status = 'pending'
         self.status_history = [{
@@ -133,11 +135,11 @@ class Reservation(Base):
         """Validate status transitions."""
         if status not in RESERVATION_STATUSES:
             raise ValueError(f"Invalid status: {status}")
-        
+
         if self.status and status != self.status:
             if status not in VALID_STATUS_TRANSITIONS[self.status]:
                 raise ValueError(f"Invalid status transition: {self.status} -> {status}")
-        
+
         return status
 
     def calculate_cost(self) -> Decimal:
@@ -184,10 +186,10 @@ class Reservation(Base):
     def update_status(self, new_status: str, reason: str) -> str:
         """Update reservation status with transition validation."""
         self.validate_status(None, new_status)
-        
+
         old_status = self.status
         self.status = new_status
-        
+
         # Record status change
         self.status_history.append({
             'status': new_status,
@@ -195,7 +197,7 @@ class Reservation(Base):
             'reason': reason,
             'previous_status': old_status
         })
-        
+
         self.updated_at = datetime.utcnow()
         return new_status
 
