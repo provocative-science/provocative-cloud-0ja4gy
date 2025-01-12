@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from prometheus_client import Counter, Gauge, Histogram
-from carbon_metrics import CarbonMetrics
+from .carbon_metrics import CarbonMetrics
 
 from api.schemas.gpu import GPUBase
 from db.models.gpu import GPU

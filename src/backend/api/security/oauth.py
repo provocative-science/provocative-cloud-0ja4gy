@@ -28,14 +28,40 @@ RATE_LIMIT_WINDOW = 300  # 5 minutes
 
 logger = logging.getLogger(__name__)
 
+class GoogleOAuth:
+    """
+    Wrapper class for Google OAuth2.0 flows, reusing existing functions.
+    """
+
+    @staticmethod
+    def get_authorization_url(redirect_uri: str, request: Request) -> str:
+        """Static method to generate a Google OAuth authorization URL."""
+        return get_authorization_url(redirect_uri, request)
+
+    @staticmethod
+    def exchange_code(auth_request: GoogleAuthRequest, request: Request) -> GoogleAuthResponse:
+        """Static method to exchange an authorization code for tokens."""
+        return exchange_code(auth_request, request)
+
+    @staticmethod
+    def get_user_info(access_token: str, request: Request) -> Dict:
+        """Static method to retrieve user information using an access token."""
+        return get_user_info(access_token, request)
+
+    @staticmethod
+    def verify_token(token: str, request: Request) -> Dict:
+        """Static method to verify a Google OAuth token."""
+        return verify_oauth_token(token, request)
+
+
 @limits(calls=RATE_LIMIT_ATTEMPTS, period=RATE_LIMIT_WINDOW)
 def create_oauth_client() -> Flow:
     """
     Creates a secure Google OAuth2.0 client instance with enhanced security features.
-    
+
     Returns:
         Flow: Configured Google OAuth2.0 flow instance
-    
+
     Raises:
         HTTPException: If client creation fails
     """
@@ -55,12 +81,12 @@ def create_oauth_client() -> Flow:
             scopes=settings.OAUTH_SCOPES,
             autogenerate_code_verifier=True
         )
-        
+
         # Configure secure transport
         flow.fetch_token = lambda *args, **kwargs: flow._fetch_token(*args, **kwargs, timeout=30)
-        
+
         return flow
-    
+
     except Exception as e:
         logger.error(f"OAuth client creation failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to initialize OAuth client")
@@ -69,14 +95,14 @@ def create_oauth_client() -> Flow:
 def get_authorization_url(redirect_uri: str, request: Request) -> str:
     """
     Generates secure Google OAuth authorization URL with enhanced validation.
-    
+
     Args:
         redirect_uri: OAuth redirect URI
         request: FastAPI request object
-    
+
     Returns:
         str: Secure authorization URL for Google OAuth
-    
+
     Raises:
         HTTPException: If URL generation fails or validation errors occur
     """
@@ -100,12 +126,12 @@ def get_authorization_url(redirect_uri: str, request: Request) -> str:
         }
 
         authorization_url, _ = flow.authorization_url(**auth_params)
-        
+
         logger.info(
             "Generated OAuth authorization URL",
             extra={"ip": request.client.host, "fingerprint": device_fingerprint}
         )
-        
+
         return authorization_url
 
     except Exception as e:
@@ -116,14 +142,14 @@ def get_authorization_url(redirect_uri: str, request: Request) -> str:
 def exchange_code(auth_request: GoogleAuthRequest, request: Request) -> GoogleAuthResponse:
     """
     Securely exchanges OAuth authorization code for tokens with MFA validation.
-    
+
     Args:
         auth_request: OAuth authentication request
         request: FastAPI request object
-    
+
     Returns:
         GoogleAuthResponse: Validated OAuth tokens response
-    
+
     Raises:
         HTTPException: If token exchange fails or validation errors occur
     """
@@ -185,14 +211,14 @@ def exchange_code(auth_request: GoogleAuthRequest, request: Request) -> GoogleAu
 def get_user_info(access_token: str, request: Request) -> Dict:
     """
     Securely retrieves user information from Google with enhanced validation.
-    
+
     Args:
         access_token: Google access token
         request: FastAPI request object
-    
+
     Returns:
         dict: Validated user profile information
-    
+
     Raises:
         HTTPException: If user info retrieval fails
     """
@@ -214,12 +240,12 @@ def get_user_info(access_token: str, request: Request) -> Dict:
             raise HTTPException(status_code=401, detail="Failed to retrieve user info")
 
         user_info = response.data.decode("utf-8")
-        
+
         logger.debug(
             "Retrieved user info",
             extra={"ip": request.client.host}
         )
-        
+
         return user_info
 
     except Exception as e:
@@ -230,21 +256,21 @@ def get_user_info(access_token: str, request: Request) -> Dict:
 def verify_oauth_token(token: str, request: Request) -> Dict:
     """
     Comprehensively verifies Google OAuth ID token with security checks.
-    
+
     Args:
         token: Google ID token
         request: FastAPI request object
-    
+
     Returns:
         dict: Verified and validated token claims
-    
+
     Raises:
         HTTPException: If token verification fails
     """
     try:
         # Create request for token verification
         google_request = GoogleRequest()
-        
+
         # Verify token
         id_info = google_request.verify_oauth2_token(
             token,

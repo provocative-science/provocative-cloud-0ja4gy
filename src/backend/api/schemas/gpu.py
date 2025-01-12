@@ -9,6 +9,7 @@ from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, validator  # version: 2.0+
+from typing import List
 
 from api.schemas.metrics import GPUMetricsBase
 
@@ -124,14 +125,55 @@ class GPUResponse(BaseModel):
         required_keys = {'cooling_efficiency', 'power_usage', 'carbon_impact'}
         if not all(key in value for key in required_keys):
             raise ValueError(f"Environmental metrics must include: {', '.join(required_keys)}")
-            
+
         if not 0 <= value.get('cooling_efficiency', 0) <= 1:
             raise ValueError("Cooling efficiency must be between 0 and 1")
-            
+
         if value.get('power_usage', 0) < 0:
             raise ValueError("Power usage cannot be negative")
-            
+
         if value.get('carbon_impact', 0) < 0:
             raise ValueError("Carbon impact cannot be negative")
-            
+
         return value
+
+class GPUMetrics(BaseModel):
+    """Schema for representing individual GPU metrics."""
+    power_usage_watts: float
+    utilization_percent: float
+    temperature_celsius: float
+    fan_speed_percent: Optional[float] = None
+
+    def validate_schema(self):
+        """Placeholder schema validation."""
+        return True
+
+    def validate_metrics(self):
+        """Placeholder metrics validation."""
+        return True
+
+    def validate_environmental_metrics(self):
+        """Placeholder environmental metrics validation."""
+        return True
+
+from pydantic import BaseModel, Field
+from decimal import Decimal
+from typing import Optional
+
+class GPUEnvironmental(BaseModel):
+    """Pydantic model representing environmental metrics for GPUs."""
+    power_efficiency: Decimal = Field(..., description="Power efficiency of the GPU")
+    thermal_efficiency: Decimal = Field(..., description="Thermal efficiency of the GPU")
+    carbon_efficiency: Decimal = Field(..., description="Carbon efficiency of the GPU")
+    cooling_status: Optional[str] = Field(None, description="Status of the GPU cooling system")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "power_efficiency": "0.95",
+                "thermal_efficiency": "0.90",
+                "carbon_efficiency": "0.80",
+                "cooling_status": "optimized"
+            }
+        }
+

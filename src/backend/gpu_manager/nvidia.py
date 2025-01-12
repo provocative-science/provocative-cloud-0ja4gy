@@ -10,6 +10,13 @@ from typing import Dict, Optional, List
 import time
 
 import pynvml  # version: 11.5.0
+try:
+    import pynvml
+    from gpu_manager.cuda_utils import CUDAContext, initialize_cuda, manage_power_state, record_environmental_metrics
+    NVML_AVAILABLE = True
+except ImportError:
+    NVML_AVAILABLE = False
+
 import numpy as np  # version: 1.24+
 
 from gpu_manager.config import gpu_settings
@@ -33,6 +40,10 @@ def initialize_nvml() -> bool:
     Returns:
         bool: Success status of NVML initialization
     """
+    if not NVML_AVAILABLE:
+        logger.warning("NVML not available. Skipping GPU initialization.")
+        return False
+
     for attempt in range(NVML_INIT_RETRY_LIMIT):
         try:
             pynvml.nvmlInit()
@@ -61,6 +72,10 @@ def shutdown_nvml() -> bool:
     Returns:
         bool: Success status of shutdown
     """
+    if not NVML_AVAILABLE:
+        logger.warning("NVML not available. Skipping GPU initialization.")
+        return False
+
     try:
         # Synchronize all GPU operations
         for device_id in range(pynvml.nvmlDeviceGetCount()):

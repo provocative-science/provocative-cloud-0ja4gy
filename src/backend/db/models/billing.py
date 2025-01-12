@@ -18,6 +18,49 @@ PAYMENT_METHOD_CHOICES = ["card", "bank_transfer", "crypto"]
 CURRENCY_CODES = ["USD", "EUR", "GBP", "JPY"]
 AUDIT_ACTIONS = ["created", "updated", "refunded", "disputed", "reconciled"]
 
+class AuditLog(Base):
+    """
+    SQLAlchemy model representing an audit log entry for tracking significant events
+    in the billing and payment services of the Provocative Cloud platform.
+    """
+    __tablename__ = 'audit_logs'
+
+    # Primary key
+    id = Column(UUID, primary_key=True, default=uuid4, nullable=False)
+
+    # Event details
+    action = Column(String(50), nullable=False)  # Action performed (e.g., payment_created, payment_processed)
+    resource_id = Column(UUID, nullable=False)  # ID of the resource affected (e.g., payment, invoice)
+    user_id = Column(UUID, nullable=False)  # ID of the user associated with the action
+    details = Column(JSON, nullable=True)  # Additional details about the action
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    @classmethod
+    def create_audit_entry(
+        cls, db_session, action: str, resource_id: UUID, user_id: UUID, details: dict
+    ) -> None:
+        """
+        Create and persist an audit log entry.
+
+        Args:
+            db_session: SQLAlchemy database session
+            action: Action performed (e.g., payment_created, pricing_updated)
+            resource_id: ID of the affected resource
+            user_id: ID of the user performing the action
+            details: Additional details about the action
+        """
+        audit_log = cls(
+            action=action,
+            resource_id=resource_id,
+            user_id=user_id,
+            details=details
+        )
+        db_session.add(audit_log)
+        db_session.commit()
+
+
 class Transaction(Base):
     """
     SQLAlchemy model representing a billing transaction with enhanced security and audit capabilities.

@@ -220,3 +220,94 @@ def validate_billing_data(payment_data: dict) -> bool:
         return True
     except (KeyError, TypeError, ValueError, decimal.InvalidOperation):
         return False
+
+def validate_gpu_specifications(gpu: GPUBase) -> bool:
+    """
+    Validates the specifications of a GPU instance.
+
+    Args:
+        gpu: Instance of GPUBase containing GPU specifications
+
+    Returns:
+        bool: True if all GPU specifications are valid, False otherwise
+    """
+    try:
+        # Validate GPU model
+        if not validate_gpu_model(gpu.model):
+            return False
+
+        # Validate VRAM
+        if not validate_vram(gpu.vram_gb):
+            return False
+
+        # Validate price
+        if not validate_price(gpu.price_per_hour):
+            return False
+
+        # Validate cooling efficiency
+        if not validate_cooling_efficiency(gpu.cooling_efficiency):
+            return False
+
+        # Validate power limit
+        if not (MIN_POWER_LIMIT_WATTS <= gpu.power_limit_watts <= MAX_POWER_LIMIT_WATTS):
+            return False
+
+        return True
+    except (ValueError, KeyError, TypeError) as e:
+        # Log the error if needed (logger can be added here)
+        return False
+
+def validate_payment_info(payment: PaymentBase) -> bool:
+    """
+    Validates the information in a payment instance.
+
+    Args:
+        payment: Instance of PaymentBase containing payment information.
+
+    Returns:
+        bool: True if all payment information is valid, False otherwise.
+    """
+    try:
+        # Validate payment amount
+        if not validate_price(payment.amount):
+            return False
+
+        # Validate currency
+        if payment.currency.upper() not in ['USD', 'EUR', 'GBP']:
+            return False
+
+        # Validate user ID
+        try:
+            UUID(str(payment.user_id))
+        except ValueError:
+            return False
+
+        # Validate reservation ID
+        try:
+            UUID(str(payment.reservation_id))
+        except ValueError:
+            return False
+
+        return True
+    except (AttributeError, ValueError, TypeError) as e:
+        # Log the error if needed (logger can be added here)
+        return False
+
+def validate_uuid(uuid_str: str) -> bool:
+    """
+    Validates whether a given string is a valid UUID.
+
+    Args:
+        uuid_str: String to validate as a UUID.
+
+    Returns:
+        bool: True if the string is a valid UUID, False otherwise.
+    """
+    try:
+        # Attempt to create a UUID object from the string
+        UUID(uuid_str)
+        return True
+    except (ValueError, TypeError):
+        # If an error occurs, the string is not a valid UUID
+        return False
+

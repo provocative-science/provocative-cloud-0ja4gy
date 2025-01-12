@@ -64,7 +64,7 @@ class ElasticsearchHandler(logging.Handler):
 
 class RequestIdFilter(logging.Filter):
     """Thread-safe logging filter that adds request ID to all log records."""
-    
+
     def __init__(self):
         super().__init__()
         self._lock = threading.Lock()
@@ -90,7 +90,7 @@ class RequestIdFilter(logging.Filter):
 
 class AsyncLogHandler(logging.Handler):
     """Asynchronous log handler for improved performance."""
-    
+
     def __init__(self, capacity: int = 10000):
         super().__init__()
         self._queue = queue.Queue(maxsize=capacity)
@@ -155,25 +155,27 @@ def log_request(request):
     print(f"Logging request: {request}")
 
 def log_error(error):
-    logger = logging.getLogger("StructuredLogger")
+    #logger = logging.getLogger("StructuredLogger")
+    logger = get_logger("api.middleware")
     logger.error(f"Error: {error}")
 
 def setup_logging(
+    app,
     log_level: str = "INFO",
     elk_host: str = "localhost",
     elk_port: int = 9200,
     sentry_dsn: Optional[str] = None
 ) -> None:
     """Configure the logging system with JSON formatting and security measures."""
-    
+
     # Configure JSON logging
     json_logging.init_fastapi(enable_json=True)
-    json_logging.init_request_instrument()
+    json_logging.init_request_instrument(app)  # Pass the FastAPI app instance here
 
     # Configure base logger
     logger = logging.getLogger(PROJECT_NAME)
     logger.setLevel(LOG_LEVELS.get(log_level.upper(), logging.INFO))
-    
+
     # Add request ID tracking
     request_filter = RequestIdFilter()
     logger.addFilter(request_filter)
@@ -192,25 +194,15 @@ def setup_logging(
 
     # Configure ELK Stack integration
     if settings.ENVIRONMENT == "production":
-        elk_handler = ElasticsearchHandler(
+        elk_handler = ElasticsearchLogger(
             hosts=[f"https://{elk_host}:{elk_port}"],
+            auth_type="api_key",
             api_key=settings.ELK_API_KEY.get_secret_value(),
             index_name=f"{PROJECT_NAME.lower()}-logs",
             ssl_verify=True,
             use_ssl=True
         )
         logger.addHandler(elk_handler)
-
-#    if settings.ENVIRONMENT == "production":
-#        elk_handler = ElasticsearchLogger(
-#            hosts=[f"https://{elk_host}:{elk_port}"],
-#            auth_type="api_key",
-#            api_key=settings.ELK_API_KEY.get_secret_value(),
-#            index_name=f"{PROJECT_NAME.lower()}-logs",
-#            ssl_verify=True,
-#            use_ssl=True
-#        )
-#        logger.addHandler(elk_handler)
 
     # Configure Sentry integration
     if sentry_dsn:
@@ -239,9 +231,9 @@ def setup_logging(
 def get_logger(module_name: str, context: Dict = None) -> structlog.BoundLogger:
     """Returns a configured logger instance with context support."""
     logger = structlog.get_logger(module_name)
-    
+
     if context:
         sanitized_context = sanitize_log_data(context)
         logger = logger.bind(**sanitized_context)
-    
+
     return logger

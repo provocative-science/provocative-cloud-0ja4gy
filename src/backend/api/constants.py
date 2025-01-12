@@ -26,6 +26,11 @@ EXCLUDED_PATHS = [
     "/redoc"
 ]
 
+# Role Constants
+ROLE_USER = "user"
+ROLE_HOST = "host"
+ROLE_ADMIN = "admin"
+
 # Role-Based Access Control
 USER_ROLES = [
     "user",    # Regular platform user

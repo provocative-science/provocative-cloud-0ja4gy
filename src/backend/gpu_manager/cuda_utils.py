@@ -10,9 +10,24 @@ import logging
 from collections import deque
 
 import numpy as np
-from numba import cuda  # version: 0.57+
-import pycuda.driver as drv  # version: 2022.1+
-import pycuda.autoinit
+#from numba import cuda  # version: 0.57+
+#import pycuda.driver as drv  # version: 2022.1+
+#import pycuda.autoinit
+try:
+    import pycuda.driver as drv
+    import pycuda.autoinit
+    from numba import cuda
+    PYCUDA_AVAILABLE = True
+except:
+    PYCUDA_AVAILABLE = False
+
+    class CUDAContext:
+        """
+        Stub class for managing or mocking a CUDA context.
+        If you need more logic, add it here.
+        """
+        def __init__(self):
+            pass
 
 from gpu_manager.config import gpu_settings
 
@@ -163,6 +178,10 @@ class EnvironmentalMetricsCollector:
 @cuda_error_handler
 def initialize_cuda() -> bool:
     """Initializes CUDA runtime with enhanced error handling and driver validation."""
+    if not PYCUDA_AVAILABLE:
+        logger.warning("PyCUDA not available. Skipping CUDA initialization.")
+        return False
+
     try:
         if not drv.get_version():
             raise RuntimeError("CUDA driver not found")

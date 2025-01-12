@@ -12,6 +12,7 @@ from fastapi import HTTPException, Depends, Security
 from fastapi.security import SecurityScopes, HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt, JWTError
 from redis import Redis
+from urllib.parse import urlparse
 
 from ..config import settings
 from ..schemas.auth import JWTPayload, TokenResponse
@@ -24,9 +25,11 @@ TOKEN_BLACKLIST_TTL = 86400  # 24 hours in seconds
 
 # Initialize components
 oauth2_scheme = HTTPBearer(auto_error=True)
+redis_url = urlparse(settings.REDIS_URL.get_secret_value())
 redis_client = Redis(
-    host=settings.REDIS_URL.get_secret_value().split("@")[1].split(":")[0],
-    port=int(settings.REDIS_URL.get_secret_value().split(":")[-1]),
+    host=redis_url.hostname,
+    port=redis_url.port,
+    password=redis_url.password,
     ssl=settings.ENVIRONMENT == "production",
     decode_responses=True
 )
@@ -40,16 +43,16 @@ def create_access_token(
 ) -> TokenResponse:
     """
     Creates a new JWT access token with enhanced security features.
-    
+
     Args:
         user_id: User's unique identifier
         email: User's email address
         roles: List of user roles
         device_id: Unique device identifier
-    
+
     Returns:
         TokenResponse containing access token, expiration and fingerprint
-    
+
     Raises:
         HTTPException: If rate limit exceeded or token generation fails
     """
@@ -118,14 +121,14 @@ def create_access_token(
 def decode_token(token: str, fingerprint: str) -> JWTPayload:
     """
     Decodes and validates JWT token with comprehensive security checks.
-    
+
     Args:
         token: JWT token string
         fingerprint: Token fingerprint for validation
-    
+
     Returns:
         JWTPayload containing validated user information
-    
+
     Raises:
         HTTPException: If token is invalid, expired, or blacklisted
     """
@@ -188,6 +191,64 @@ def decode_token(token: str, fingerprint: str) -> JWTPayload:
             detail="Invalid authentication token"
         )
 
+def verify_token(token: str, fingerprint: str) -> bool:
+    """
+    Verifies a JWT token and its fingerprint for validity.
+
+    Args:
+        token: JWT token string
+        fingerprint: Token fingerprint for validation
+
+    Returns:
+        bool: True if the token is valid and the fingerprint matches, False otherwise
+    """
+    try:
+        # Decode the token to retrieve the payload
+        payload = decode_token(token, fingerprint)
+
+        # Check if the fingerprint in the token matches the provided fingerprint
+        if payload.fingerprint != fingerprint:
+            return False
+
+        return True
+
+    except HTTPException:
+        # If decoding fails or fingerprint doesn't match, the token is invalid
+        return False
+
+def validate_token_fingerprint(token: str, expected_fingerprint: str) -> bool:
+    """
+    Validates the fingerprint of a JWT token.
+
+    Args:
+        token: JWT token string
+        expected_fingerprint: Expected fingerprint for validation
+
+    Returns:
+        bool: True if the token fingerprint matches the expected fingerprint
+
+    Raises:
+        HTTPException: If the fingerprint is invalid or doesn't match
+    """
+    try:
+        # Decode the token to retrieve the payload
+        payload = decode_token(token, expected_fingerprint)
+
+        # Compare the fingerprint in the token with the expected fingerprint
+        if payload.fingerprint != expected_fingerprint:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token fingerprint"
+            )
+
+        return True
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Token fingerprint validation failed: {str(e)}"
+        )
+
 async def get_current_user(
     security_scopes: SecurityScopes,
     credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
@@ -195,15 +256,15 @@ async def get_current_user(
 ) -> JWTPayload:
     """
     FastAPI dependency for authenticated user with enhanced security.
-    
+
     Args:
         security_scopes: Required security scopes
         credentials: Bearer token credentials
         fingerprint: Token fingerprint for validation
-    
+
     Returns:
         JWTPayload containing current user information
-    
+
     Raises:
         HTTPException: If authentication fails or insufficient permissions
     """
@@ -246,3 +307,50 @@ async def get_current_user(
             status_code=401,
             detail="Authentication failed"
         )
+
+def validate_token_device(token: str, device_fingerprint: str) -> bool:
+    """
+    Validates a JWT token against a given device fingerprint.
+
+    Args:
+        token: JWT token string
+        device_fingerprint: Fingerprint of the client device
+
+    Returns:
+        bool: True if the token is valid and matches the device fingerprint
+
+    Raises:
+        HTTPException: If token validation fails
+    """
+    try:
+        # Decode the token to extract its payload
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY.get_secret_value(),
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+
+        # Check if the device fingerprint matches
+        if payload.get("fingerprint") != device_fingerprint:
+            raise HTTPException(
+                status_code=401,
+                detail="Device fingerprint does not match"
+            )
+
+        logger.info(
+            "Token validated successfully against device fingerprint",
+            extra={"device_id": payload.get("device_id")}
+        )
+
+        return True
+
+    except JWTError as e:
+        logger.warning(
+            f"Token validation against device failed: {str(e)}",
+            extra={"error": str(e)}
+        )
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication token"
+        )
+

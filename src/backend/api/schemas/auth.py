@@ -124,3 +124,23 @@ class TokenVerifyRequest(BaseModel):
         if not value or len(value) != 64:  # SHA-256 hexadecimal length
             raise ValueError("Invalid token fingerprint format")
         return value
+
+class DeviceFingerprint(BaseModel):
+    """Schema model for device fingerprint validation."""
+    device_id: str = Field(..., description="Unique device identifier")
+    fingerprint: str = Field(..., description="Unique device fingerprint (SHA-256)")
+
+    @validator("device_id")
+    def validate_device_id(cls, value: str) -> str:
+        """Validates device ID format."""
+        if not re.match(DEVICE_ID_PATTERN, value):
+            raise ValueError("Invalid device ID format")
+        return value
+
+    @validator("fingerprint")
+    def validate_fingerprint(cls, value: str) -> str:
+        """Validates fingerprint format."""
+        if len(value) != 64:  # SHA-256 hexadecimal length
+            raise ValueError("Fingerprint must be a 64-character SHA-256 hash")
+        return value
+

@@ -35,7 +35,7 @@ environmental_metrics_gauge = Gauge(
     ['gpu_id', 'metric_type']
 )
 
-@router.get("/", response_model=List[GPUResponse])
+@router.get("/")
 @require_role(ROLE_USER)
 @cache(ttl=30)
 async def list_gpus(
@@ -44,30 +44,30 @@ async def list_gpus(
 ) -> List[GPUResponse]:
     """
     Retrieve list of available GPUs with environmental metrics.
-    
+
     Args:
         gpu_service: Injected GPU service instance
         include_environmental: Whether to include environmental metrics
-        
+
     Returns:
         List[GPUResponse]: List of available GPUs with specifications and metrics
     """
     gpu_request_counter.labels(endpoint="list_gpus").inc()
-    
+
     try:
         gpus = await gpu_service.get_available_gpus()
-        
+
         if include_environmental:
             for gpu in gpus:
                 env_metrics = await gpu_service.get_gpu_metrics(gpu['id'])
                 gpu['environmental_metrics'] = env_metrics['environmental_metrics']
-                
+
                 # Update Prometheus metrics
                 environmental_metrics_gauge.labels(
                     gpu_id=gpu['id'],
                     metric_type='carbon_efficiency'
                 ).set(env_metrics['environmental_metrics']['carbon_efficiency'])
-                
+
         return gpus
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -80,16 +80,16 @@ async def get_gpu(
 ) -> GPUResponse:
     """
     Get detailed information about a specific GPU including environmental metrics.
-    
+
     Args:
         gpu_id: GPU identifier
         gpu_service: Injected GPU service instance
-        
+
     Returns:
         GPUResponse: Detailed GPU information with metrics
     """
     gpu_request_counter.labels(endpoint="get_gpu").inc()
-    
+
     try:
         gpu_data = await gpu_service.get_gpu_metrics(gpu_id)
         return gpu_data
@@ -104,32 +104,32 @@ async def get_environmental_metrics(
 ) -> Dict:
     """
     Get detailed environmental impact metrics for a specific GPU.
-    
+
     Args:
         gpu_id: GPU identifier
         gpu_service: Injected GPU service instance
-        
+
     Returns:
         Dict: Environmental metrics including carbon capture data
     """
     gpu_request_counter.labels(endpoint="get_environmental_metrics").inc()
-    
+
     try:
         metrics = await gpu_service.get_gpu_metrics(gpu_id)
         env_metrics = metrics['environmental_metrics']
-        
+
         # Calculate carbon effectiveness
         effectiveness = calculate_carbon_effectiveness(
             env_metrics['power_efficiency'],
             env_metrics['carbon_efficiency']
         )
-        
+
         # Update Prometheus metrics
         environmental_metrics_gauge.labels(
             gpu_id=str(gpu_id),
             metric_type='effectiveness'
         ).set(effectiveness)
-        
+
         return {
             'gpu_id': str(gpu_id),
             'power_efficiency': env_metrics['power_efficiency'],
@@ -150,26 +150,26 @@ async def environmental_metrics_websocket(
 ) -> AsyncIterator[Dict]:
     """
     WebSocket endpoint for real-time environmental metrics streaming.
-    
+
     Args:
         websocket: WebSocket connection
         gpu_id: GPU identifier
         gpu_service: Injected GPU service instance
     """
     await websocket.accept()
-    
+
     try:
         while True:
             # Get latest environmental metrics
             metrics = await gpu_service.get_gpu_metrics(gpu_id)
             env_metrics = metrics['environmental_metrics']
-            
+
             # Calculate effectiveness
             effectiveness = calculate_carbon_effectiveness(
                 env_metrics['power_efficiency'],
                 env_metrics['carbon_efficiency']
             )
-            
+
             # Prepare metrics payload
             payload = {
                 'timestamp': metrics['timestamp'],
@@ -182,10 +182,10 @@ async def environmental_metrics_websocket(
                     'carbon_effectiveness': effectiveness
                 }
             }
-            
+
             await websocket.send_json(payload)
             await asyncio.sleep(5)  # Update every 5 seconds
-            
+
     except Exception as e:
         await websocket.close(code=1000)
         raise HTTPException(status_code=500, detail=str(e))
@@ -198,20 +198,20 @@ async def optimize_cooling(
 ) -> Dict:
     """
     Trigger cooling system optimization for all GPUs.
-    
+
     Args:
         background_tasks: FastAPI background tasks
         gpu_service: Injected GPU service instance
-        
+
     Returns:
         Dict: Optimization results for all GPUs
     """
     gpu_request_counter.labels(endpoint="optimize_cooling").inc()
-    
+
     try:
         # Run optimization in background
         background_tasks.add_task(gpu_service.optimize_cooling)
-        
+
         return {
             'status': 'optimization_started',
             'message': 'Cooling system optimization initiated'

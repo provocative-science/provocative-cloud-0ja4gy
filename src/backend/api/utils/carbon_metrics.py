@@ -29,10 +29,10 @@ def initialize_carbon_monitoring() -> bool:
     try:
         # Set up Prometheus metrics collectors
         _setup_prometheus_metrics()
-        
+
         # Initialize logging with detailed tracking
         setup_logging()
-        
+
         # Validate system configuration
         logger.info("Carbon monitoring system initialized with capture rate: %.2f", CO2_CAPTURE_RATE)
         return True
@@ -43,10 +43,10 @@ def initialize_carbon_monitoring() -> bool:
 def calculate_co2_emissions(gpu_metrics: Dict) -> float:
     """
     Calculates CO2 emissions with enhanced accuracy and validation.
-    
+
     Args:
         gpu_metrics: Dictionary containing GPU power usage and efficiency metrics
-        
+
     Returns:
         float: Validated CO2 emissions in kilograms with confidence score
     """
@@ -66,7 +66,7 @@ def calculate_co2_emissions(gpu_metrics: Dict) -> float:
         # Validate results against historical trends
         if emissions > 100:  # Threshold for unrealistic values
             logger.warning(f"Unusually high emissions detected: {emissions} kgCO2")
-            
+
         return emissions
     except Exception as e:
         logger.error(f"CO2 emissions calculation failed: {str(e)}")
@@ -75,10 +75,10 @@ def calculate_co2_emissions(gpu_metrics: Dict) -> float:
 def calculate_carbon_capture(co2_emissions: float) -> float:
     """
     Calculates CO2 capture with advanced validation and monitoring.
-    
+
     Args:
         co2_emissions: CO2 emissions in kilograms
-        
+
     Returns:
         float: Validated CO2 captured in kilograms with system efficiency metrics
     """
@@ -102,11 +102,11 @@ def calculate_carbon_capture(co2_emissions: float) -> float:
 def calculate_carbon_effectiveness(total_emissions: float, total_captured: float) -> float:
     """
     Calculates enhanced Carbon Usage Effectiveness (CUE) with trend analysis.
-    
+
     Args:
         total_emissions: Total CO2 emissions in kilograms
         total_captured: Total CO2 captured in kilograms
-        
+
     Returns:
         float: CUE ratio with trend analysis and confidence metrics
     """
@@ -133,12 +133,110 @@ def calculate_carbon_effectiveness(total_emissions: float, total_captured: float
         logger.error(f"Carbon effectiveness calculation failed: {str(e)}")
         raise
 
+def calculate_power_usage_effectiveness(total_facility_power: float, it_power: float) -> float:
+    """
+    Calculates the Power Usage Effectiveness (PUE), which is the ratio of
+    the total amount of power used by the data center facility to the
+    power delivered to IT equipment (e.g., servers, GPUs).
+
+    Args:
+        total_facility_power (float): Total power consumption for the entire facility (kW or kWh).
+        it_power (float): Power consumption used specifically by IT equipment (kW or kWh).
+
+    Returns:
+        float: The calculated PUE. Typical values range above 1.0.
+    """
+    try:
+        # Basic validation
+        if total_facility_power <= 0 or it_power <= 0:
+            raise ValueError("Total facility power and IT power must be positive.")
+
+        # Calculate PUE
+        pue = total_facility_power / it_power
+
+        # Optionally warn if PUE is outside a normal-ish range
+        if pue < 1.0:
+            logger.warning(f"Unusually low PUE (<1.0) detected: {pue:.2f}")
+        elif pue > 2.5:
+            logger.warning(f"High PUE detected: {pue:.2f}")
+
+        return pue
+
+    except Exception as e:
+        logger.error(f"Failed to calculate PUE: {str(e)}")
+        raise
+
+def calculate_carbon_usage_effectiveness(total_data_center_emissions: float, it_equipment_energy_kwh: float) -> float:
+    """
+    Calculates the Carbon Usage Effectiveness (CUE), the ratio of the total
+    data center CO₂ emissions to the energy used by the IT equipment (in kWh).
+
+    Args:
+        total_data_center_emissions (float): Total CO₂ emissions from the data center, in kilograms.
+        it_equipment_energy_kwh (float): Energy consumption of IT equipment, in kWh.
+
+    Returns:
+        float: The CUE ratio. Lower is generally better (less CO₂ per kWh of IT power).
+    """
+    try:
+        if total_data_center_emissions < 0 or it_equipment_energy_kwh <= 0:
+            raise ValueError(
+                f"Invalid inputs for CUE calculation. "
+                f"Emissions={total_data_center_emissions}, IT Energy={it_equipment_energy_kwh}"
+            )
+
+        cue = total_data_center_emissions / it_equipment_energy_kwh
+
+        # Optional: warn if the ratio is outside typical bounds
+        if cue < 0.0:
+            logger.warning(f"Unusually low (negative) CUE detected: {cue:.2f}")
+        elif cue > 2.0:
+            logger.warning(f"High CUE detected: {cue:.2f}")
+
+        return cue
+
+    except Exception as e:
+        logger.error(f"Failed to calculate Carbon Usage Effectiveness: {str(e)}")
+        raise
+
+def calculate_co2_captured(total_co2_emissions: float, capture_rate: float = 0.5) -> float:
+    """
+    Calculates how much CO₂ has been captured, given total emissions and a capture rate.
+
+    Args:
+        total_co2_emissions (float): Total CO₂ emissions in kilograms.
+        capture_rate (float): Fraction (0-1) of CO₂ emissions captured. Default is 0.5 (50%).
+
+    Returns:
+        float: CO₂ captured in kilograms.
+
+    Raises:
+        ValueError: If inputs are invalid (e.g., negative emissions or capture rate).
+    """
+    try:
+        if total_co2_emissions < 0:
+            raise ValueError(f"CO₂ emissions must be non-negative. Received: {total_co2_emissions}")
+        if not (0 <= capture_rate <= 1):
+            raise ValueError(f"Capture rate must be between 0 and 1. Received: {capture_rate}")
+
+        captured_co2 = total_co2_emissions * capture_rate
+
+        # Optionally log a warning if capture_rate is suspiciously high
+        if capture_rate > 0.9:
+            logger.warning(f"High CO₂ capture rate: {capture_rate * 100:.2f}%")
+
+        return captured_co2
+
+    except Exception as e:
+        logger.error(f"Failed to calculate CO₂ captured: {str(e)}")
+        raise
+
 class CarbonMetricsCollector:
     """
     Enhanced class for continuous collection and monitoring of carbon-related metrics
     with validation and optimization.
     """
-    
+
     def __init__(self):
         """Initializes enhanced carbon metrics collector with validation."""
         self._collectors = self._setup_prometheus_collectors()
@@ -222,20 +320,20 @@ class CarbonMetricsCollector:
         while self._is_collecting:
             try:
                 start_time = time.time()
-                
+
                 # Collect and process metrics
                 metrics = self.get_current_metrics()
-                
+
                 # Update Prometheus metrics
                 self._update_prometheus_metrics(metrics)
-                
+
                 # Update cache and trend analysis
                 self._update_metrics_cache(metrics)
-                
+
                 # Calculate collection latency
                 latency = time.time() - start_time
                 self._collectors['collection_latency'].observe(latency)
-                
+
                 time.sleep(METRICS_COLLECTION_INTERVAL)
             except Exception as e:
                 self._logger.error(f"Metrics collection error: {str(e)}")
@@ -247,12 +345,12 @@ class CarbonMetricsCollector:
             # Validate emissions
             if metrics['emissions_kg'] < 0:
                 raise ValueError(f"Invalid negative emissions: {metrics['emissions_kg']}")
-            
+
             # Validate capture ratio
             capture_ratio = metrics['captured_kg'] / metrics['emissions_kg'] if metrics['emissions_kg'] > 0 else 0
             if capture_ratio > CO2_CAPTURE_RATE + 0.1:
                 self._logger.warning(f"Unusually high capture ratio detected: {capture_ratio:.2f}")
-            
+
             # Validate effectiveness
             if not 0 <= metrics['effectiveness_ratio'] <= 1:
                 raise ValueError(f"Invalid effectiveness ratio: {metrics['effectiveness_ratio']}")
@@ -273,14 +371,14 @@ class CarbonMetricsCollector:
         """Updates metrics cache with latest values and performs trend analysis."""
         try:
             self._metrics_cache[metrics['timestamp']] = metrics
-            
+
             # Clean old cache entries
             current_time = time.time()
             self._metrics_cache = {
                 ts: m for ts, m in self._metrics_cache.items()
                 if current_time - ts <= 86400  # Keep 24 hours of data
             }
-            
+
             # Update trend analysis
             if len(self._metrics_cache) > 1:
                 timestamps = sorted(self._metrics_cache.keys())

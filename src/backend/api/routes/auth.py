@@ -6,40 +6,66 @@ including device fingerprinting, rate limiting, and comprehensive audit logging.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from fastapi_limiter import RateLimiter
-from python_audit_logger import AuditLogger
+from fastapi_limiter.depends import RateLimiter
+#from python_audit_logger import AuditLogger
 
 from ..schemas.auth import (
-    TokenResponse, GoogleAuthRequest, GoogleAuthResponse, 
+    TokenResponse, GoogleAuthRequest, GoogleAuthResponse,
     JWTPayload, DeviceFingerprint
 )
-from ..services.auth_service import (
-    authenticate_user, get_oauth_url, get_user_by_token, validate_device
-)
+#from ..services.auth_service import (
+#    authenticate_user, get_oauth_url, get_user_by_token, validate_device
+#)
+from ..services.auth_service import AuthService
 from ..security.jwt import get_current_user, validate_token_device
 
 # Initialize router with prefix and tags
 router = APIRouter(prefix='/auth', tags=['Authentication'])
 
 # Initialize audit logger for authentication events
-audit_logger = AuditLogger()
+#audit_logger = AuditLogger()
 
 # Configure rate limiter with IP-based tracking
-rate_limiter = RateLimiter(key_func=lambda r: r.client.host)
+#rate_limiter = RateLimiter(key_func=lambda r: r.client.host)
 
-@router.get('/login')
-@rate_limiter.limit('5/minute')
+# Initialize AuthService instance
+from sqlalchemy.orm import Session
+from db import SessionLocal
+def get_db_session() -> Session:
+    """Creates and returns a new database session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+db_session = next(get_db_session())  # Manually get a session instance
+auth_service = AuthService(db_session=db_session)
+
+from fastapi import FastAPI
+from fastapi_limiter import FastAPILimiter
+from redis import Redis
+
+# Create your FastAPI app instance
+app = FastAPI()
+
+# Initialize FastAPILimiter with Redis and key function
+@app.on_event("startup")
+async def startup():
+    redis = Redis(host="localhost", port=6379, decode_responses=True)  # Adjust Redis connection details
+    await FastAPILimiter.init(redis, identifier=lambda request: request.client.host)
+
+@router.get('/login', dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def oauth_login(request: Request, redirect_uri: str) -> dict:
     """
     Generates Google OAuth authorization URL with enhanced security validation.
-    
+
     Args:
         request: FastAPI request object for IP tracking
         redirect_uri: OAuth callback URI
-        
+
     Returns:
         dict: Authorization URL and state token
-        
+
     Raises:
         HTTPException: If validation fails or rate limit exceeded
     """
@@ -55,8 +81,8 @@ async def oauth_login(request: Request, redirect_uri: str) -> dict:
         )
 
         # Generate authorization URL with state token
-        auth_url = await get_oauth_url(redirect_uri)
-        
+        auth_url = await auth_service.get_oauth_url(redirect_uri)
+
         return {
             "authorization_url": auth_url,
             "state": request.state.oauth_state
@@ -75,35 +101,22 @@ async def oauth_login(request: Request, redirect_uri: str) -> dict:
             detail="Failed to generate authorization URL"
         )
 
-@router.post('/callback')
-@rate_limiter.limit('3/minute')
+@router.post('/callback', dependencies=[Depends(RateLimiter(times=3, seconds=60))])
 async def oauth_callback(
     auth_request: GoogleAuthRequest,
     device_info: DeviceFingerprint,
-    db_session: Session,
-    request: Request
+    request: Request,
+    db_session: Session = Depends()  # Mark db_session as a dependency
 ) -> TokenResponse:
     """
     Handles OAuth callback with enhanced security and device validation.
-    
-    Args:
-        auth_request: OAuth authentication request
-        device_info: Client device fingerprint data
-        db_session: Database session
-        request: FastAPI request object
-        
-    Returns:
-        TokenResponse: JWT token with device binding
-        
-    Raises:
-        HTTPException: If authentication fails or validation errors occur
     """
     try:
         # Validate device fingerprint
-        await validate_device(device_info, request.client.host)
+        await auth_service.validate_device(device_info, request.client.host)
 
         # Authenticate user with enhanced security
-        token_response = await authenticate_user(
+        token_response = await auth_service.authenticate_user(
             auth_request=auth_request,
             db_session=db_session,
             device_fingerprint=device_info.fingerprint_hash,
@@ -137,26 +150,26 @@ async def oauth_callback(
 @router.get('/me')
 async def get_me(
     current_user: JWTPayload = Depends(get_current_user),
-    db_session: Session = None,
+    db_session: Session = Depends(),  # Inject db_session using Depends
     request: Request = None
 ) -> dict:
     """
     Returns current authenticated user information with role validation.
-    
+
     Args:
         current_user: JWT payload from token
         db_session: Database session
         request: FastAPI request object
-        
+
     Returns:
         dict: Current user data with roles
-        
+
     Raises:
         HTTPException: If token validation fails
     """
     try:
         # Get user from database with role information
-        user = await get_user_by_token(
+        user = await auth_service.get_user_by_token(
             token=request.headers.get("Authorization").split()[1],
             db_session=db_session,
             device_fingerprint=current_user.device_id,
@@ -187,8 +200,7 @@ async def get_me(
             detail="Failed to retrieve user information"
         )
 
-@router.post('/verify')
-@rate_limiter.limit('10/minute')
+@router.post('/verify', dependencies=[Depends(RateLimiter(times=10, seconds=60))])
 async def verify_token(
     verify_request: dict,
     device_info: DeviceFingerprint,
@@ -196,15 +208,15 @@ async def verify_token(
 ) -> dict:
     """
     Verifies JWT token with comprehensive security checks.
-    
+
     Args:
         verify_request: Token verification request
         device_info: Client device fingerprint
         request: FastAPI request object
-        
+
     Returns:
         dict: Token verification result
-        
+
     Raises:
         HTTPException: If token verification fails
     """

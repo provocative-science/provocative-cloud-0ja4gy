@@ -13,6 +13,66 @@ TRANSACTION_STATUS_CHOICES = ('pending', 'success', 'failed')
 SUPPORTED_CURRENCIES = ('USD', 'EUR', 'GBP')
 MIN_PAYMENT_AMOUNT = Decimal('0.01')
 
+SUPPORTED_CURRENCIES = ('USD', 'EUR', 'GBP')
+MIN_PAYMENT_AMOUNT = Decimal('0.01')
+MAX_HOURLY_RATE = Decimal('100.0')  # Example maximum hourly rate
+
+class PaymentValidation:
+    """
+    Utility class for validating payment-related data including amounts, currencies,
+    and pricing with comprehensive error handling.
+    """
+
+    @staticmethod
+    def validate_amount(amount: Decimal) -> None:
+        """Validates that the payment amount is positive and within allowed precision."""
+        if amount <= MIN_PAYMENT_AMOUNT:
+            raise ValueError(f"Payment amount must be greater than {MIN_PAYMENT_AMOUNT}")
+        if abs(amount.as_tuple().exponent) > 2:
+            raise ValueError("Payment amount cannot have more than 2 decimal places")
+
+    @staticmethod
+    def validate_currency(currency: str) -> None:
+        """Validates that the currency is one of the supported currencies."""
+        if currency.upper() not in SUPPORTED_CURRENCIES:
+            raise ValueError(f"Currency must be one of: {', '.join(SUPPORTED_CURRENCIES)}")
+
+    @staticmethod
+    def validate_price(price_per_hour: Decimal) -> None:
+        """Validates that the price per hour is within acceptable limits."""
+        if price_per_hour <= MIN_PAYMENT_AMOUNT:
+            raise ValueError(f"Price must be greater than {MIN_PAYMENT_AMOUNT}")
+        if price_per_hour > MAX_HOURLY_RATE:
+            raise ValueError(f"Price exceeds maximum hourly rate of {MAX_HOURLY_RATE}")
+
+    @staticmethod
+    def validate_market_rate(gpu_model: str, price_per_hour: Decimal) -> None:
+        """
+        Mock validation for market rate checks.
+
+        Args:
+            gpu_model: The GPU model for which pricing is being set.
+            price_per_hour: The price per hour being validated.
+
+        Raises:
+            ValueError: If the price deviates significantly from the market rate.
+        """
+        # Example market rate logic (replace with real market data checks)
+        MARKET_RATES = {
+            'RTX 4090': Decimal('10.0'),
+            'A100': Decimal('20.0'),
+            'V100': Decimal('15.0')
+        }
+        market_rate = MARKET_RATES.get(gpu_model)
+        if not market_rate:
+            raise ValueError(f"Unsupported GPU model: {gpu_model}")
+
+        # Allow up to 50% deviation from market rate
+        if price_per_hour < market_rate * Decimal('0.5') or price_per_hour > market_rate * Decimal('1.5'):
+            raise ValueError(
+                f"Price for {gpu_model} must be within 50% of the market rate: {market_rate}"
+            )
+
 class PaymentBase(BaseModel):
     """Base Pydantic model for payment data validation with enhanced currency and amount validation."""
     user_id: UUID

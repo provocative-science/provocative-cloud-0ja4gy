@@ -12,7 +12,7 @@ import logging
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, BackgroundTasks
-from fastapi_limiter import RateLimiter
+from fastapi_limiter.depends import RateLimiter
 
 from db.models.billing import Payment, Transaction, GPUPricing, Invoice, AuditLog
 from api.schemas.billing import (

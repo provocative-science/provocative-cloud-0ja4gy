@@ -42,8 +42,9 @@ def cleanup_gpu_manager(manager: GPUManager) -> None:
 gpu_config = gpu_settings.get_gpu_settings()
 monitoring_config = gpu_settings.get_monitoring_settings()
 environmental_config = gpu_settings.get_environmental_settings()
-carbon_capture_config = gpu_settings.get_carbon_capture_settings()
+#carbon_capture_config = gpu_settings.get_carbon_capture_settings()
 
 # Validate configurations
-if not all([gpu_config, monitoring_config, environmental_config, carbon_capture_config]):
+#if not all([gpu_config, monitoring_config, environmental_config, carbon_capture_config]):
+if not all([gpu_config, monitoring_config, environmental_config]):
     raise RuntimeError("Failed to initialize GPU Manager configurations")

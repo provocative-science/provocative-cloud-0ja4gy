@@ -45,19 +45,19 @@ __all__ = [
     'get_request_logger',
     'log_request',
     'log_error',
-    
+
     # Validation utilities
     'validate_gpu_specifications',
     'validate_payment_info',
     'validate_email',
     'validate_uuid',
-    
+
     # GPU metrics utilities
     'GPUMetricsCollector',
     'collect_gpu_metrics',
     'process_metrics',
     'calculate_carbon_impact',
-    
+
     # Carbon metrics utilities
     'CarbonMetricsCollector',
     'calculate_co2_emissions',
@@ -66,16 +66,16 @@ __all__ = [
 ]
 
 # Initialize logging system
-setup_logging()
+#setup_logging() # Redundant, comment out
 
 # Initialize metrics collectors
-gpu_metrics_collector = GPUMetricsCollector()
-carbon_metrics_collector = CarbonMetricsCollector()
+#gpu_metrics_collector = GPUMetricsCollector() # Redundant?
+#carbon_metrics_collector = CarbonMetricsCollector() # Redundant?
 
 def get_metrics_collectors():
     """
     Returns initialized instances of metrics collectors for GPU and carbon metrics.
-    
+
     Returns:
         tuple: (GPUMetricsCollector, CarbonMetricsCollector) instances
     """
@@ -98,20 +98,20 @@ def stop_metrics_collection():
 def validate_and_process_metrics(metrics_data: dict) -> dict:
     """
     Validates and processes incoming metrics data with comprehensive checks.
-    
+
     Args:
         metrics_data: Raw metrics data to validate and process
-        
+
     Returns:
         dict: Processed and validated metrics data
     """
     # Validate GPU specifications
     if not validate_gpu_specifications(metrics_data):
         raise ValueError("Invalid GPU metrics data")
-        
+
     # Process GPU metrics
     processed_metrics = process_metrics(metrics_data)
-    
+
     # Calculate environmental impact
     carbon_impact = calculate_carbon_impact(
         processed_metrics.get('power_usage', 0),
@@ -119,27 +119,27 @@ def validate_and_process_metrics(metrics_data: dict) -> dict:
         processed_metrics.get('cooling_efficiency', 0.8),
         0.5  # Default CO2 capture rate
     )
-    
+
     # Combine metrics
     processed_metrics['environmental_impact'] = carbon_impact
-    
+
     return processed_metrics
 
 def initialize_monitoring():
     """
     Initializes comprehensive monitoring system with logging and metrics collection.
-    
+
     Returns:
         bool: Success status of initialization
     """
     try:
         # Set up logging
         setup_logging()
-        
+
         # Initialize metrics collectors
         gpu_metrics_collector.start_collection()
         carbon_metrics_collector.start_collection()
-        
+
         return True
     except Exception as e:
         log_error("Failed to initialize monitoring", error=str(e))
@@ -152,7 +152,7 @@ def cleanup_monitoring():
     try:
         # Stop metrics collection
         stop_metrics_collection()
-        
+
         # Additional cleanup if needed
         pass
     except Exception as e:

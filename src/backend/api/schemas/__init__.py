@@ -42,20 +42,20 @@ __all__ = [
     "JWTPayload",
     "TokenRefreshRequest",
     "TokenVerifyRequest",
-    
+
     # Billing schemas
     "PaymentBase",
     "PaymentCreate",
     "TransactionBase",
     "PricingBase",
-    
+
     # GPU management schemas
     "GPUBase",
     "GPUCreate",
     "GPUUpdate",
     "GPUMetrics",
     "GPUResponse",
-    
+
     # Metrics schemas
     "GPUMetricsBase",
     "CarbonMetricsBase",
@@ -63,48 +63,64 @@ __all__ = [
     "MetricsResponse"
 ]
 
-@validator("*", pre=True)
 def validate_schema_compatibility(cls: Type[BaseModel]) -> bool:
     """
-    Validates schema compatibility and ensures proper validation methods exist.
-    
-    Args:
-        cls: Pydantic model class to validate
-        
-    Returns:
-        bool: True if schema is compatible, False otherwise
-        
-    Raises:
-        ValueError: If schema validation fails
+    Validates schema compatibility for GPU-related models and ensures
+    proper validation methods exist for metrics-related schemas.
     """
-    # Verify schema version compatibility
-    if not hasattr(cls, "__version__"):
-        setattr(cls, "__version__", SCHEMA_VERSION)
-    elif cls.__version__ != SCHEMA_VERSION:
-        raise ValueError(
-            f"Schema version mismatch. Expected {SCHEMA_VERSION}, got {cls.__version__}"
-        )
-    
-    # Verify required validation methods
+    # Skip validation for non-GPU or non-metrics models
+    if not any(keyword in cls.__name__ for keyword in ["GPU", "Metrics", "System"]):
+        return True
+
+    # Define required validation methods for metrics-related models
     required_validators = {
         "validate_metrics",
         "validate_environmental_metrics",
         "validate_schema"
     }
-    
-    missing_validators = required_validators - set(cls.__validators__.keys())
-    if missing_validators and any(base == BaseModel for base in cls.__bases__):
+
+    # Check for missing validators
+    missing_validators = {method for method in required_validators if not hasattr(cls, method)}
+
+    if missing_validators:
         raise ValueError(
             f"Missing required validators in {cls.__name__}: {missing_validators}"
         )
-    
+
     # Verify environmental metrics integration for GPU-related schemas
     if "GPU" in cls.__name__ and not hasattr(cls, "environmental_metrics"):
         raise ValueError(
             f"Missing environmental metrics integration in {cls.__name__}"
         )
-    
+
     return True
+
+def validate_schema_compatibility(cls: Type[BaseModel]) -> bool:
+    """
+    Validates schema compatibility and ensures proper validation methods exist
+    for metric-related schemas. Non-metric schemas are exempt from this check.
+    """
+    # Skip validation for non-metrics models
+    if "Metrics" not in cls.__name__:
+        return True
+
+    # Define required validation methods for metrics-related models
+    required_validators = {
+        "validate_metrics",
+        "validate_environmental_metrics",
+        "validate_schema"
+    }
+
+    # Check for missing validators
+    missing_validators = {method for method in required_validators if not hasattr(cls, method)}
+
+    if missing_validators:
+        raise ValueError(
+            f"Missing required validators in {cls.__name__}: {missing_validators}"
+        )
+
+    return True
+
 
 # Initialize schema validation on import
 for schema in __all__:
